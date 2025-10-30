@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlexPlayer - Support</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 40px 20px;
+            margin-bottom: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+        
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .support-section {
+            background: white;
+            margin-bottom: 30px;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border-left: 4px solid #667eea;
+        }
+        
+        h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            font-weight: 600;
+        }
+        
+        h3 {
+            color: #555;
+            margin-bottom: 15px;
+            margin-top: 25px;
+            font-size: 1.3em;
+        }
+        
+        .contact-info {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .contact-method {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .contact-icon {
+            width: 40px;
+            height: 40px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .faq-item {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .faq-question {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .faq-answer {
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        .app-info {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .response-time {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border-left: 4px solid #28a745;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 10px;
+            }
+            
+            header {
+                padding: 30px 15px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .support-section {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>FlexPlayer</h1>
+            <p class="subtitle">Support & Help Center</p>
+        </header>
+
+        <div class="support-section">
+            <h2>📧 Contact Support</h2>
+            <p>Need help with FlexPlayer? I'm here to assist you! Please reach out using any of the methods below:</p>
+            
+            <div class="contact-info">
+                <!-- <div class="contact-method">
+                    <div class="contact-icon">📧</div>
+                    <div>
+                        <strong>Email Support</strong><br>
+                        <a href="mailto:george@babichevIT.com">george@babichevIT.com</a>
+                    </div>
+                </div> -->
+                
+                <div class="contact-method">
+                    <div class="contact-icon">🐛</div>
+                    <div>
+                        <strong>Bug Reports & Feature Requests</strong><br>
+                        <a href="https://github.com/gbabichev/FlexPlayer/issues" target="_blank">GitHub Issues</a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- <div class="response-time">
+                <strong>⏱️ Response Time:</strong> I typically respond to support requests within 24-48 hours.
+            </div> -->
+        </div>
+
+        <div class="support-section">
+            <h2>❓ Frequently Asked Questions</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question">How does this work?</div>
+                <div class="faq-answer">
+                    Open the Files app and drop content into the corresponding folders, or do it via the Mac.<br><br>
+                    <p align="center">
+                        <img src="Support1.png" width="50%">
+                        <img src="Support2.png" width="15%">
+                    </p>
+                    Then open the app, and hit "Fetch Metadata" to get posters and content details.
+                    <p align="center">
+                        <img src="Support3.png" width="50%">
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- <div class="support-section">
+            <h2>🔧 Troubleshooting</h2>
+            
+            <h3>Permission Issues</h3>
+            <p>If you're having trouble with screen recording permissions:</p>
+            <ul style="margin-left: 20px; margin-top: 10px;">
+                <li>Go to Settings > Privacy & Security > Screen Recording</li>
+                <li>Enable Screen Snip in the list</li>
+                <li>Restart the app after granting permissions</li>
+            </ul>
+        </div> -->
+
+        <div class="support-section">
+            <h2>📱 App Information</h2>
+            <div class="app-info">
+                <!-- <p><strong>Current Version:</strong> 0.9.0</p> -->
+                <p><strong>Compatibility:</strong> iOS 17.0 or later</p>
+                <p><strong>Developer:</strong> George Babichev</p>
+            </div>
+        </div>
+
+        <div class="support-section">
+            <h2>💡 Feature Requests</h2>
+            <p>Have an idea for improving FlexPlayer? I'd love to hear from you! <br>
+                 Create an issue on the <a href=https://github.com/gbabichev/FlexPlayer/issues" target="_blank">GitHub repository</a>.</p>
+        </div>
+ 
+        <div class="support-section">
+            <h2>More Apps!</h2>
+            <p>Check out my website for more cool stuff! <a href="https://georgebabichev.com">GeorgeBabichev.com</a></p>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 George Babichev. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
