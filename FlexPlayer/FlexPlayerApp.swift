@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct FlexPlayerApp: App {
+    @StateObject private var appState = AppState()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             VideoProgress.self,
@@ -30,9 +32,13 @@ struct FlexPlayerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .sheet(isPresented: $appState.showTutorial) {
+                    TutorialView(isPresented: $appState.showTutorial)
+                }
                 .onOpenURL { url in
                     handleIncomingURL(url)
                 }
+                .environmentObject(appState)
         }
         .modelContainer(sharedModelContainer)
     }

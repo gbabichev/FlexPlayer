@@ -11,6 +11,7 @@ import AVKit
 
 struct ContentView: View {
     @Environment(\.modelContext) var modelContext
+    @EnvironmentObject var appState: AppState
     @StateObject var documentManager = DocumentManager()
     @State var selectedItem: SidebarItem?
     @State var selectedVideoURL: URL?
@@ -47,7 +48,9 @@ struct ContentView: View {
                             } description: {
                                 Text("Use the Files app or your Mac to add content to the Shows and Movies folders")
                             } actions: {
-                                Link("Help", destination: URL(string: "#")!)
+                                Button("Help") {
+                                    appState.showTutorial = true
+                                }
                             }
                             .frame(width: geometry.size.width, height: geometry.size.height)
                         }
