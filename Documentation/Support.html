@@ -111,6 +111,29 @@
             color: #333;
             margin-bottom: 10px;
             font-size: 1.1em;
+            scroll-margin-top: 20px;
+        }
+
+        .faq-question a {
+            color: #333;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .faq-question a:hover {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .faq-question a::before {
+            content: "🔗 ";
+            opacity: 0;
+            transition: opacity 0.2s;
+            margin-right: 5px;
+        }
+
+        .faq-question:hover a::before {
+            opacity: 0.5;
         }
         
         .faq-answer {
@@ -207,19 +230,18 @@
 
         <div class="support-section">
             <h2>❓ Frequently Asked Questions</h2>
-            
-            <div class="faq-item">
-                <div class="faq-question">How does this work?</div>
+        
+            <div class="faq-item" id="transfer-files">
+                <div class="faq-question"><a href="#transfer-files">How do I transfer files to FlexPlayer?</a></div>
                 <div class="faq-answer">
-                    Open the Files app and drop content into the corresponding folders, or do it via the Mac.<br><br>
-                    <p align="center">
-                        <img src="Support1.png" width="50%">
-                        <img src="Support2.png" width="15%">
-                    </p>
-                    Then open the app, and hit "Fetch Metadata" to get posters and content details.
-                    <p align="center">
-                        <img src="Support3.png" width="50%">
-                    </p>
+                    There are several ways to transfer media files to FlexPlayer:
+                    <ul style="margin-left: 20px; margin-top: 10px;">
+                        <li><strong>Using the Files app on iOS:</strong> Open the Files app, navigate to "On My iPhone/iPad" > "FlexPlayer", and drag your video files into the Movies or TV Shows folders.</li>
+                        <li><strong>Using a Mac:</strong> Connect your device to your Mac, open Finder, select your device, go to the Files tab, and drag files directly into the FlexPlayer folders.</li>
+                        <li><strong>AirDrop:</strong> Send files from another Apple device using AirDrop, then move them to the FlexPlayer folders using the Files app.</li>
+                        <li><strong>Cloud Services:</strong> Download files from iCloud Drive, Dropbox, or other cloud services directly into the FlexPlayer folders through the Files app.</li>
+                    </ul>
+                    After transferring files, open FlexPlayer and tap "Fetch Metadata" to automatically download posters and media information.
                 </div>
             </div>
         </div>

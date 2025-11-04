@@ -13,7 +13,9 @@ struct TutorialView: View {
         TutorialPage(
             icon: "folder.fill",
             title: "Organize Your Library",
-            description: "Add your supported video files to FlexPlayer using the Files app, or using Finder on macOS"
+            description: "Add your supported video files to FlexPlayer using the Files app, or using Finder on macOS",
+            linkText: "Learn More",
+            linkURL: "https://gbabichev.github.io/FlexPlayer/Documentation/Support.html#transfer-files"
         ),
         TutorialPage(
             icon: "info.circle.fill",
@@ -104,6 +106,12 @@ struct TutorialPageView: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 40)
 
+            if let linkText = page.linkText, let linkURL = page.linkURL {
+                Link(linkText, destination: URL(string: linkURL)!)
+                    .font(.subheadline)
+                    .padding(.top, 4)
+            }
+
             Spacer()
         }
     }
@@ -113,6 +121,16 @@ struct TutorialPage {
     let icon: String
     let title: String
     let description: String
+    let linkText: String?
+    let linkURL: String?
+
+    init(icon: String, title: String, description: String, linkText: String? = nil, linkURL: String? = nil) {
+        self.icon = icon
+        self.title = title
+        self.description = description
+        self.linkText = linkText
+        self.linkURL = linkURL
+    }
 }
 
 #Preview {
