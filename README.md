@@ -39,19 +39,12 @@ Then open the app, and hit "Fetch Metadata" to get posters and content details.
 
 ### ⚙️ Installation
 
-App Store coming soon!
-
-### ⚙️ Build it yourself!
-
-Clone the repo and build with Xcode:
-
-```bash
-git clone https://github.com/gbabichev/FlexPlayer.git
-cd FlexPlayer
-open FlexPlayer.xcodeproj
-```
+<a href="https://apps.apple.com/us/app/flex-player/id6754710574">App Store</a>
 
 ## 📝 Changelog
+
+### 1.0.1
+- Added an intro Tutorial / Help.
 
 ### 1.0.0 
 - Initial Release. 
