@@ -211,6 +211,157 @@ extension ContentView {
         selectedItem = nil
         documentManager.loadDocuments(modelContext: modelContext)
     }
+
+    func updateShowMetadata(for showName: String, with selectedShow: UnifiedShow) {
+        print("🔄 Updating show metadata for \(showName) with \(selectedShow.name)")
+
+        Task {
+            do {
+                let showDescriptor = FetchDescriptor<ShowMetadata>(
+                    predicate: #Predicate { metadata in
+                        metadata.showName == showName
+                    }
+                )
+                let existingMetadata = try? modelContext.fetch(showDescriptor).first
+
+                let showMetadata: ShowMetadata
+                if let existing = existingMetadata {
+                    print("   🔄 Updating existing ShowMetadata")
+                    showMetadata = existing
+                    showMetadata.tmdbId = selectedShow.id
+                    showMetadata.displayName = selectedShow.name
+                    showMetadata.overview = selectedShow.overview
+                    showMetadata.posterPath = selectedShow.posterPath
+                    showMetadata.backdropPath = selectedShow.backdropPath
+                    showMetadata.firstAirDate = selectedShow.firstAirDate
+                    showMetadata.lastUpdated = Date()
+                    if selectedShow.posterPath == nil {
+                        showMetadata.posterData = nil
+                    }
+                } else {
+                    print("   ➕ Creating new ShowMetadata")
+                    showMetadata = ShowMetadata(
+                        showName: showName,
+                        tmdbId: selectedShow.id,
+                        displayName: selectedShow.name,
+                        overview: selectedShow.overview,
+                        posterPath: selectedShow.posterPath,
+                        backdropPath: selectedShow.backdropPath,
+                        firstAirDate: selectedShow.firstAirDate
+                    )
+                    modelContext.insert(showMetadata)
+                }
+
+                if let posterPath = selectedShow.posterPath {
+                    do {
+                        print("   📥 Downloading poster...")
+                        let posterData = try await MetadataService.shared.downloadPoster(path: posterPath)
+                        showMetadata.posterData = posterData
+                        print("   ✅ Downloaded poster (\(posterData.count) bytes)")
+                    } catch {
+                        print("   ⚠️ Failed to download poster: \(error)")
+                    }
+                }
+
+                guard let show = documentManager.shows.first(where: { $0.name == showName }) else {
+                    try modelContext.save()
+                    await MainActor.run {
+                        documentManager.loadDocuments(modelContext: modelContext)
+                        updateSelection()
+                    }
+                    return
+                }
+
+                for file in show.files {
+                    guard let (season, episode) = file.episodeInfo else { continue }
+                    print("   📹 Updating S\(season)E\(episode): \(file.name)")
+
+                    do {
+                        guard let unifiedEpisode = try await MetadataService.shared.getEpisode(
+                            showId: selectedShow.id,
+                            season: season,
+                            episode: episode
+                        ) else {
+                            print("   ⚠️ No data for S\(season)E\(episode)")
+                            continue
+                        }
+
+                        let episodeMetadata: EpisodeMetadata
+                        if let existing = file.metadata {
+                            episodeMetadata = existing
+                        } else {
+                            let episodeDescriptor = FetchDescriptor<EpisodeMetadata>(
+                                predicate: #Predicate { metadata in
+                                    metadata.showName == showName &&
+                                    metadata.seasonNumber == season &&
+                                    metadata.episodeNumber == episode
+                                }
+                            )
+                            if let existing = try? modelContext.fetch(episodeDescriptor).first {
+                                episodeMetadata = existing
+                            } else {
+                                episodeMetadata = EpisodeMetadata(
+                                    showName: showName,
+                                    seasonNumber: season,
+                                    episodeNumber: episode,
+                                    tmdbId: unifiedEpisode.id,
+                                    showTmdbId: selectedShow.id,
+                                    displayName: unifiedEpisode.name,
+                                    overview: unifiedEpisode.overview,
+                                    stillPath: unifiedEpisode.stillPath,
+                                    airDate: unifiedEpisode.airDate
+                                )
+                                modelContext.insert(episodeMetadata)
+                            }
+                        }
+
+                        episodeMetadata.tmdbId = unifiedEpisode.id
+                        episodeMetadata.showTmdbId = selectedShow.id
+                        episodeMetadata.displayName = unifiedEpisode.name
+                        episodeMetadata.overview = unifiedEpisode.overview
+                        episodeMetadata.stillPath = unifiedEpisode.stillPath
+                        episodeMetadata.airDate = unifiedEpisode.airDate
+                        episodeMetadata.lastUpdated = Date()
+                        episodeMetadata.stillData = nil
+
+                        if let stillPath = unifiedEpisode.stillPath {
+                            do {
+                                print("      📥 Downloading thumbnail...")
+                                let stillData = try await MetadataService.shared.downloadStill(path: stillPath)
+                                episodeMetadata.stillData = stillData
+                                print("      ✅ Downloaded thumbnail (\(stillData.count) bytes)")
+                            } catch {
+                                print("      ⚠️ Failed to download thumbnail: \(error)")
+                                await VideoThumbnailGenerator.generateAndStoreThumbnail(
+                                    for: file,
+                                    in: episodeMetadata,
+                                    modelContext: modelContext
+                                )
+                            }
+                        } else {
+                            await VideoThumbnailGenerator.generateAndStoreThumbnail(
+                                for: file,
+                                in: episodeMetadata,
+                                modelContext: modelContext
+                            )
+                        }
+                    } catch {
+                        print("   ⚠️ Failed to update episode S\(season)E\(episode): \(error)")
+                    }
+                }
+
+                try modelContext.save()
+                print("   ✅ Show metadata updated successfully")
+
+                await MainActor.run {
+                    documentManager.loadDocuments(modelContext: modelContext)
+                    updateSelection()
+                }
+            } catch {
+                print("   ⚠️ Failed to update show metadata: \(error)")
+            }
+        }
+    }
     
     func getPlaylistURLs(for currentURL: URL) -> [URL] {
         // Check if this is a show episode

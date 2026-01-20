@@ -22,6 +22,7 @@ struct ContentView: View {
     @State var selectedMovieThumbnail: Movie?
     @State var selectedMovieThumbnailFileName: String?
     @State var selectedExternalVideoThumbnail: ExternalVideo?
+    @State private var showToRematch: ShowToRematch?
     @Query(sort: \ExternalVideo.lastPlayed, order: .reverse) var externalVideos: [ExternalVideo]
     @Query var allEpisodeMetadata: [EpisodeMetadata]
     @Query var allMovieMetadata: [MovieMetadata]
@@ -65,6 +66,14 @@ struct ContentView: View {
                             switch item {
                             case .show(let show):
                                 ShowRowView(show: show)
+                                    .contextMenu {
+                                        Button {
+                                            print("🔍 Re-match tapped for show: \(show.name)")
+                                            showToRematch = ShowToRematch(name: show.name)
+                                        } label: {
+                                            Label("Re-match Metadata", systemImage: "magnifyingglass")
+                                        }
+                                    }
                             case .movies:
                                 HStack(spacing: 12) {
                                     // Look up movie by stable fileName instead of using the Movie struct directly
@@ -354,6 +363,14 @@ struct ContentView: View {
         } message: { item in
             Text(deleteAlertMessage(for: item))
         }
+        .sheet(item: $showToRematch) { show in
+            ShowMetadataSearchView(showName: show.name) { selectedShow in
+                updateShowMetadata(for: show.name, with: selectedShow)
+            }
+            .onAppear {
+                print("📺 Presenting ShowMetadataSearchView for: \(show.name)")
+            }
+        }
         .onChange(of: documentManager.shows) { _, _ in
             updateSelection()
         }
@@ -364,4 +381,3 @@ struct ContentView: View {
     
 
 }
-

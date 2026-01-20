@@ -170,6 +170,23 @@ class TheTVDBService {
         return response.data.first
     }
 
+    // Search for TV shows by name (returns multiple results)
+    func searchShows(name: String, limit: Int = 10) async throws -> [TVDBShow] {
+        let query = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        let urlString = "\(baseURL)/search?query=\(query)&type=series"
+
+        guard let url = URL(string: urlString) else {
+            throw TVDBError.invalidURL
+        }
+
+        let request = try await authenticatedRequest(url: url)
+        let (data, _) = try await URLSession.shared.data(for: request)
+
+        let response = try JSONDecoder().decode(TVDBSearchResponse.self, from: data)
+
+        return Array(response.data.prefix(limit))
+    }
+
     // Get episode details for a specific season and episode
     func getEpisode(showId: Int, season: Int, episode: Int) async throws -> TVDBEpisode? {
         // First get all episodes for the show

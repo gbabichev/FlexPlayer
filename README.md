@@ -43,6 +43,9 @@ Then open the app, and hit "Fetch Metadata" to get posters and content details.
 
 ## 📝 Changelog
 
+### 1.1.0
+- Added support for rematching metadata on TV Shows.
+
 ### 1.0.1
 - Added an intro Tutorial / Help.
 

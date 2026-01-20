@@ -84,6 +84,21 @@ class TMDBService {
         
         return response.results.first
     }
+
+    // Search for TV shows by name (returns multiple results)
+    func searchShows(name: String, limit: Int = 10) async throws -> [TMDBShow] {
+        let query = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        let urlString = "\(baseURL)/search/tv?api_key=\(apiKey)&query=\(query)"
+
+        guard let url = URL(string: urlString) else {
+            throw TMDBError.invalidURL
+        }
+
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(TMDBSearchResponse.self, from: data)
+
+        return Array(response.results.prefix(limit))
+    }
     
     // Search for a movie by title (returns first result)
     func searchMovie(title: String) async throws -> TMDBMovie? {

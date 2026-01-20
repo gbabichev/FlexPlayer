@@ -92,6 +92,36 @@ class MetadataService {
             )
         }
     }
+
+    // Search for shows (returns multiple results)
+    func searchShows(name: String, limit: Int = 10) async throws -> [UnifiedShow] {
+        switch selectedSource {
+        case .tmdb:
+            let shows = try await TMDBService.shared.searchShows(name: name, limit: limit)
+            return shows.map { show in
+                UnifiedShow(
+                    id: show.id,
+                    name: show.name,
+                    overview: show.overview,
+                    posterPath: show.posterPath,
+                    backdropPath: show.backdropPath,
+                    firstAirDate: show.firstAirDate
+                )
+            }
+        case .tvdb:
+            let shows = try await TheTVDBService.shared.searchShows(name: name, limit: limit)
+            return shows.map { show in
+                UnifiedShow(
+                    id: show.id,
+                    name: show.name,
+                    overview: show.overview,
+                    posterPath: show.image,
+                    backdropPath: show.backdrop,
+                    firstAirDate: show.firstAired
+                )
+            }
+        }
+    }
     
     // Search for a movie (returns first result)
     func searchMovie(title: String) async throws -> UnifiedMovie? {
