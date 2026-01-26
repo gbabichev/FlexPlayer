@@ -46,7 +46,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         return url.lastPathComponent
     }
 
-    func makeUIViewController(context: Context) -> StatusBarHidingViewController {
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
         // Start accessing security-scoped resource for external files
         let isSecurityScoped = url.startAccessingSecurityScopedResource()
         if isSecurityScoped {
@@ -71,7 +71,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             print("AVAudioSession setup failed: \(error)")
         }
 
-        let vc = StatusBarHidingViewController()
+        let vc = AVPlayerViewController()
         let playerItem = AVPlayerItem(url: url)
 
         // Set metadata for the video
@@ -125,7 +125,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         return vc
     }
 
-    func updateUIViewController(_ vc: StatusBarHidingViewController, context: Context) {
+    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
         // Check if URL changed (for auto-play next episode)
         if context.coordinator.videoURL != url {
             print("🔄 Switching to new video: \(url.lastPathComponent)")
@@ -208,7 +208,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         }
     }
 
-    static func dismantleUIViewController(_ vc: StatusBarHidingViewController, coordinator: Coordinator) {
+    static func dismantleUIViewController(_ vc: AVPlayerViewController, coordinator: Coordinator) {
         if let observer = coordinator.timeObserver {
             vc.player?.removeTimeObserver(observer)
         }
