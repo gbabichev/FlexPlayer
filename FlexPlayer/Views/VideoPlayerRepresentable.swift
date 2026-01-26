@@ -7,6 +7,8 @@ import SwiftUI
 import SwiftData
 import AVKit
 import Combine
+import MediaPlayer
+import UIKit
 struct VideoPlayerRepresentable: UIViewControllerRepresentable {
     let url: URL
     let playlistURLs: [URL]
@@ -122,6 +124,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         }
 
         player.play()
+        context.coordinator.attachGestures(to: vc)
         return vc
     }
 
@@ -206,6 +209,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             newPlayer.play()
             print("▶️ Auto-playing next video")
         }
+        context.coordinator.attachGestures(to: vc)
     }
 
     static func dismantleUIViewController(_ vc: AVPlayerViewController, coordinator: Coordinator) {
@@ -242,6 +246,16 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         var nextVideoURLBinding: Binding<URL?>
         var nextVideoTitleBinding: Binding<String?>
         var nextVideoImageBinding: Binding<Data?>
+        private weak var gestureHostView: UIView?
+        private var volumeView: MPVolumeView?
+        private var volumeSlider: UISlider?
+        private var panStartBrightness: CGFloat?
+        private var panStartVolume: Float?
+        private var panSide: PanSide?
+        private weak var hudView: UIView?
+        private weak var hudIconView: UIImageView?
+        private weak var hudLabel: UILabel?
+        private var hudHideWorkItem: DispatchWorkItem?
 
         init(showCountdown: Binding<Bool>, nextVideoURL: Binding<URL?>, nextVideoTitle: Binding<String?>, nextVideoImage: Binding<Data?>) {
             self.showCountdownBinding = showCountdown
@@ -361,5 +375,140 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
 
             try? modelContext.save()
         }
+
+        @MainActor
+        func attachGestures(to viewController: AVPlayerViewController) {
+            if gestureHostView === viewController.view {
+                return
+            }
+
+            gestureHostView = viewController.view
+
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+            pan.maximumNumberOfTouches = 1
+            pan.cancelsTouchesInView = false
+            viewController.view.addGestureRecognizer(pan)
+
+            if volumeView == nil {
+                let volumeView = MPVolumeView(frame: .zero)
+                volumeView.isHidden = true
+                volumeView.alpha = 0.01
+                viewController.view.addSubview(volumeView)
+                self.volumeView = volumeView
+                self.volumeSlider = volumeView.subviews.compactMap { $0 as? UISlider }.first
+            }
+
+            if hudView == nil {
+                let blur = UIBlurEffect(style: .systemThinMaterialDark)
+                let hud = UIVisualEffectView(effect: blur)
+                hud.translatesAutoresizingMaskIntoConstraints = false
+                hud.layer.cornerRadius = 12
+                hud.clipsToBounds = true
+                hud.alpha = 0
+
+                let icon = UIImageView()
+                icon.translatesAutoresizingMaskIntoConstraints = false
+                icon.tintColor = .white
+
+                let label = UILabel()
+                label.translatesAutoresizingMaskIntoConstraints = false
+                label.textColor = .white
+                label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+                label.textAlignment = .center
+
+                let stack = UIStackView(arrangedSubviews: [icon, label])
+                stack.translatesAutoresizingMaskIntoConstraints = false
+                stack.axis = .vertical
+                stack.alignment = .center
+                stack.spacing = 6
+
+                hud.contentView.addSubview(stack)
+                viewController.view.addSubview(hud)
+
+                NSLayoutConstraint.activate([
+                    hud.centerXAnchor.constraint(equalTo: viewController.view.centerXAnchor),
+                    hud.centerYAnchor.constraint(equalTo: viewController.view.centerYAnchor),
+                    hud.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
+                    hud.heightAnchor.constraint(greaterThanOrEqualToConstant: 90),
+                    stack.centerXAnchor.constraint(equalTo: hud.contentView.centerXAnchor),
+                    stack.centerYAnchor.constraint(equalTo: hud.contentView.centerYAnchor)
+                ])
+
+                self.hudView = hud
+                self.hudIconView = icon
+                self.hudLabel = label
+            }
+        }
+
+        @objc
+        private func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard let hostView = gesture.view else { return }
+
+            switch gesture.state {
+            case .began:
+                let location = gesture.location(in: hostView)
+                panSide = location.x < hostView.bounds.midX ? .left : .right
+                panStartBrightness = UIScreen.main.brightness
+                panStartVolume = volumeSlider?.value
+            case .changed:
+                let translation = gesture.translation(in: hostView)
+                let delta = -Float(translation.y / max(hostView.bounds.height, 1))
+                if panSide == .left {
+                    let start = Float(panStartBrightness ?? UIScreen.main.brightness)
+                    let updated = max(0, min(1, start + delta))
+                    UIScreen.main.brightness = CGFloat(updated)
+                    updateHUD(value: updated, side: .left)
+                } else if panSide == .right, let slider = volumeSlider {
+                    let start = panStartVolume ?? slider.value
+                    let updated = max(0, min(1, start + delta))
+                    slider.setValue(updated, animated: false)
+                    slider.sendActions(for: .valueChanged)
+                    updateHUD(value: updated, side: .right)
+                }
+            default:
+                panSide = nil
+                panStartBrightness = nil
+                panStartVolume = nil
+                scheduleHUDHide()
+            }
+        }
+
+        private func updateHUD(value: Float, side: PanSide) {
+            guard let hud = hudView, let icon = hudIconView, let label = hudLabel else { return }
+
+            switch side {
+            case .left:
+                icon.image = UIImage(systemName: "sun.max.fill")
+            case .right:
+                icon.image = UIImage(systemName: "speaker.wave.2.fill")
+            }
+
+            label.text = "\(Int(round(value * 100)))%"
+
+            if hud.alpha < 1 {
+                UIView.animate(withDuration: 0.15) {
+                    hud.alpha = 1
+                }
+            }
+
+            scheduleHUDHide()
+        }
+
+        private func scheduleHUDHide() {
+            hudHideWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let hud = self?.hudView else { return }
+                UIView.animate(withDuration: 0.25) {
+                    hud.alpha = 0
+                }
+            }
+            hudHideWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: workItem)
+        }
     }
+}
+
+private enum PanSide {
+    case left
+    case right
 }
