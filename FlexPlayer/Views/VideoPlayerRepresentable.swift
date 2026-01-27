@@ -18,6 +18,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
     @Binding var nextVideoTitle: String?
     @Binding var nextVideoImage: Data?
     let modelContext: ModelContext
+    let swipeControlsAreSwapped: Bool
 
     private func getVideoTitle(for url: URL, modelContext: ModelContext) -> String? {
         // Try to find metadata for this video
@@ -111,6 +112,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             }
         }
         coordinator.timeObserver = observer
+        coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
 
         // Observe when video ends
         NotificationCenter.default.addObserver(
@@ -129,6 +131,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
+        context.coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
         // Check if URL changed (for auto-play next episode)
         if context.coordinator.videoURL != url {
             print("🔄 Switching to new video: \(url.lastPathComponent)")
@@ -193,6 +196,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
                 }
             }
             context.coordinator.timeObserver = observer
+            context.coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
 
             // Observe when new video ends
             NotificationCenter.default.addObserver(
@@ -252,6 +256,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         private var panStartBrightness: CGFloat?
         private var panStartVolume: Float?
         private var panSide: PanSide?
+        var swipeControlsAreSwapped = false
         private weak var hudView: UIView?
         private weak var hudIconView: UIImageView?
         private weak var hudLabel: UILabel?
@@ -453,17 +458,20 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             case .changed:
                 let translation = gesture.translation(in: hostView)
                 let delta = -Float(translation.y / max(hostView.bounds.height, 1))
-                if panSide == .left {
+                let brightnessSide: PanSide = swipeControlsAreSwapped ? .right : .left
+                let volumeSide: PanSide = swipeControlsAreSwapped ? .left : .right
+
+                if panSide == brightnessSide {
                     let start = Float(panStartBrightness ?? UIScreen.main.brightness)
                     let updated = max(0, min(1, start + delta))
                     UIScreen.main.brightness = CGFloat(updated)
-                    updateHUD(value: updated, side: .left)
-                } else if panSide == .right, let slider = volumeSlider {
+                    updateHUD(value: updated, control: .brightness)
+                } else if panSide == volumeSide, let slider = volumeSlider {
                     let start = panStartVolume ?? slider.value
                     let updated = max(0, min(1, start + delta))
                     slider.setValue(updated, animated: false)
                     slider.sendActions(for: .valueChanged)
-                    updateHUD(value: updated, side: .right)
+                    updateHUD(value: updated, control: .volume)
                 }
             default:
                 panSide = nil
@@ -473,13 +481,13 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             }
         }
 
-        private func updateHUD(value: Float, side: PanSide) {
+        private func updateHUD(value: Float, control: ControlType) {
             guard let hud = hudView, let icon = hudIconView, let label = hudLabel else { return }
 
-            switch side {
-            case .left:
+            switch control {
+            case .brightness:
                 icon.image = UIImage(systemName: "sun.max.fill")
-            case .right:
+            case .volume:
                 icon.image = UIImage(systemName: "speaker.wave.2.fill")
             }
 
@@ -511,4 +519,9 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
 private enum PanSide {
     case left
     case right
+}
+
+private enum ControlType {
+    case brightness
+    case volume
 }

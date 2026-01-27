@@ -18,6 +18,8 @@ struct VideoPlayerView: View {
     @State private var nextVideoTitle: String?
     @State private var nextVideoImage: Data?
     @State private var countdownTimer: Timer?
+    @AppStorage("nextEpisodeCountdownSeconds") private var countdownSeconds = 10
+    @AppStorage("swipeControlsAreSwapped") private var swipeControlsAreSwapped = false
 
     var body: some View {
         ZStack {
@@ -29,7 +31,8 @@ struct VideoPlayerView: View {
                 nextVideoURL: $nextVideoURL,
                 nextVideoTitle: $nextVideoTitle,
                 nextVideoImage: $nextVideoImage,
-                modelContext: modelContext
+                modelContext: modelContext,
+                swipeControlsAreSwapped: swipeControlsAreSwapped
             )
 
             if showCountdown, let nextTitle = nextVideoTitle {
@@ -56,7 +59,7 @@ struct VideoPlayerView: View {
     }
 
     private func startCountdown() {
-        countdownValue = 10
+        countdownValue = max(1, countdownSeconds)
         countdownTimer?.invalidate()
         countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             Task { @MainActor in

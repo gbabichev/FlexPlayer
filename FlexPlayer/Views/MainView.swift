@@ -16,13 +16,13 @@ struct ContentView: View {
     @State var selectedItem: SidebarItem?
     @State var selectedVideoURL: URL?
     @State var showingVideoPlayer = false
-    @State var showClearMetadataAlert = false
     @State var showDeleteAlert = false
     @State var itemToDelete: SidebarItem?
     @State var selectedMovieThumbnail: Movie?
     @State var selectedMovieThumbnailFileName: String?
     @State var selectedExternalVideoThumbnail: ExternalVideo?
     @State private var showToRematch: ShowToRematch?
+    @State private var showSettings = false
     @Query(sort: \ExternalVideo.lastPlayed, order: .reverse) var externalVideos: [ExternalVideo]
     @Query var allEpisodeMetadata: [EpisodeMetadata]
     @Query var allMovieMetadata: [MovieMetadata]
@@ -207,42 +207,10 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    Menu {
-                        Button(action: {
-                            Task {
-                                await documentManager.fetchMetadata(
-                                    for: documentManager.shows,
-                                    movies: documentManager.movies,
-                                    externalVideos: externalVideos,
-                                    modelContext: modelContext
-                                )
-                            }
-                        }) {
-                            Label("Fetch Metadata", systemImage: "arrow.down.circle")
-                        }
-                        .disabled(documentManager.isLoadingMetadata || sidebarItems.isEmpty)
-
-                        Button(role: .destructive, action: {
-                            showClearMetadataAlert = true
-                        }) {
-                            Label("Clear All Metadata", systemImage: "trash")
-                        }
-                        
-                        Menu("Metadata Sources") {
-                            Picker("Metadata Source", selection: $documentManager.selectedSource) {
-                                ForEach(MetadataSource.allCases, id: \.self) { source in
-                                    Text(source.displayName)
-                                        .tag(source)
-                                }
-                            }
-                        }
-
+                    Button {
+                        showSettings = true
                     } label: {
-                        Label("Metadata", systemImage: "arrow.down.circle")
-                    }
-                    .disabled(sidebarItems.isEmpty)
-                    .onChange(of: documentManager.selectedSource) { _, newValue in
-                        MetadataService.shared.selectedSource = newValue
+                        Label("Settings", systemImage: "gearshape")
                     }
                 }
             }
@@ -347,14 +315,6 @@ struct ContentView: View {
                 }
             }
         }
-        .alert("Clear All Metadata?", isPresented: $showClearMetadataAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Clear", role: .destructive) {
-                documentManager.clearAllMetadata(modelContext: modelContext)
-            }
-        } message: {
-            Text("This will remove all show posters, episode thumbnails, movie posters, titles, and descriptions. Your video files and watch progress will not be affected.")
-        }
         .alert("Delete All?", isPresented: $showDeleteAlert, presenting: itemToDelete) { item in
             Button("Cancel", role: .cancel) { }
             Button("Delete All", role: .destructive) {
@@ -376,6 +336,30 @@ struct ContentView: View {
         }
         .onChange(of: documentManager.movies) { _, _ in
             updateSelection()
+        }
+        .onChange(of: documentManager.selectedSource) { _, newValue in
+            MetadataService.shared.selectedSource = newValue
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                SettingsView(
+                    documentManager: documentManager,
+                    hasLibraryContent: !sidebarItems.isEmpty,
+                    onFetchMetadata: {
+                        Task {
+                            await documentManager.fetchMetadata(
+                                for: documentManager.shows,
+                                movies: documentManager.movies,
+                                externalVideos: externalVideos,
+                                modelContext: modelContext
+                            )
+                        }
+                    },
+                    onClearMetadata: {
+                        documentManager.clearAllMetadata(modelContext: modelContext)
+                    }
+                )
+            }
         }
     }
     
