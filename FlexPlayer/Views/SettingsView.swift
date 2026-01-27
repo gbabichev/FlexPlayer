@@ -57,6 +57,7 @@ struct SettingsView: View {
                             .tag(source)
                     }
                 }
+                .pickerStyle(.segmented)
 
                 Button {
                     onFetchMetadata()
@@ -71,6 +72,15 @@ struct SettingsView: View {
                     Label("Clear All Metadata", systemImage: "trash")
                 }
                 .disabled(!hasLibraryContent)
+
+                if documentManager.isLoadingMetadata {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ProgressView()
+                        Text("Fetching metadata from \(documentManager.selectedSource.displayName)...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
         }
         .navigationTitle("Settings")

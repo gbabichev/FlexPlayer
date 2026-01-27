@@ -214,17 +214,6 @@ struct ContentView: View {
                     }
                 }
             }
-            .overlay {
-                if documentManager.isLoadingMetadata {
-                    VStack {
-                        ProgressView("Fetching metadata from \(documentManager.selectedSource.displayName)...")
-                            .padding()
-                            .background(Color(uiColor: .systemBackground))
-                            .cornerRadius(10)
-                            .shadow(radius: 5)
-                    }
-                }
-            }
         } detail: {
             Group {
                 if let selectedItem = selectedItem {
