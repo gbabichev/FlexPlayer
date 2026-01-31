@@ -43,6 +43,9 @@ Then open the app, and hit "Fetch Metadata" to get posters and content details.
 
 ## 📝 Changelog
 
+### 1.2.0
+- Added gestures for controlling brightness and volume from the video player. 
+
 ### 1.1.0
 - Added support for rematching metadata on TV Shows.
 
