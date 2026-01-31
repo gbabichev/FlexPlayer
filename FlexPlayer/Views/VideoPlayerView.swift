@@ -19,6 +19,7 @@ struct VideoPlayerView: View {
     @State private var nextVideoImage: Data?
     @State private var countdownTimer: Timer?
     @AppStorage("nextEpisodeCountdownSeconds") private var countdownSeconds = 10
+    @AppStorage("gesturesEnabled") private var gesturesEnabled = true
     @AppStorage("swipeControlsAreSwapped") private var swipeControlsAreSwapped = false
 
     var body: some View {
@@ -32,6 +33,7 @@ struct VideoPlayerView: View {
                 nextVideoTitle: $nextVideoTitle,
                 nextVideoImage: $nextVideoImage,
                 modelContext: modelContext,
+                gesturesEnabled: gesturesEnabled,
                 swipeControlsAreSwapped: swipeControlsAreSwapped
             )
 

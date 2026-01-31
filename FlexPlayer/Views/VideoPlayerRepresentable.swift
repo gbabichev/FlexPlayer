@@ -18,6 +18,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
     @Binding var nextVideoTitle: String?
     @Binding var nextVideoImage: Data?
     let modelContext: ModelContext
+    let gesturesEnabled: Bool
     let swipeControlsAreSwapped: Bool
 
     private func getVideoTitle(for url: URL, modelContext: ModelContext) -> String? {
@@ -112,6 +113,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             }
         }
         coordinator.timeObserver = observer
+        coordinator.gesturesEnabled = gesturesEnabled
         coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
 
         // Observe when video ends
@@ -131,6 +133,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
+        context.coordinator.gesturesEnabled = gesturesEnabled
         context.coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
         // Check if URL changed (for auto-play next episode)
         if context.coordinator.videoURL != url {
@@ -196,6 +199,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
                 }
             }
             context.coordinator.timeObserver = observer
+            context.coordinator.gesturesEnabled = gesturesEnabled
             context.coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
 
             // Observe when new video ends
@@ -251,11 +255,13 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         var nextVideoTitleBinding: Binding<String?>
         var nextVideoImageBinding: Binding<Data?>
         private weak var gestureHostView: UIView?
+        private var panGesture: UIPanGestureRecognizer?
         private var volumeView: MPVolumeView?
         private var volumeSlider: UISlider?
         private var panStartBrightness: CGFloat?
         private var panStartVolume: Float?
         private var panSide: PanSide?
+        var gesturesEnabled = true
         var swipeControlsAreSwapped = false
         private weak var hudView: UIView?
         private weak var hudIconView: UIImageView?
@@ -383,8 +389,21 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
 
         @MainActor
         func attachGestures(to viewController: AVPlayerViewController) {
+            if !gesturesEnabled {
+                if let panGesture = panGesture {
+                    gestureHostView?.removeGestureRecognizer(panGesture)
+                    self.panGesture = nil
+                }
+                return
+            }
+
             if gestureHostView === viewController.view {
                 return
+            }
+
+            if let panGesture = panGesture {
+                gestureHostView?.removeGestureRecognizer(panGesture)
+                self.panGesture = nil
             }
 
             gestureHostView = viewController.view
@@ -393,6 +412,7 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             pan.maximumNumberOfTouches = 1
             pan.cancelsTouchesInView = false
             viewController.view.addGestureRecognizer(pan)
+            panGesture = pan
 
             if volumeView == nil {
                 let volumeView = MPVolumeView(frame: .zero)

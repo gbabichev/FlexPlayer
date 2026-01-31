@@ -13,6 +13,7 @@ struct SettingsView: View {
     let onClearMetadata: () -> Void
 
     @AppStorage("nextEpisodeCountdownSeconds") private var countdownSeconds = 10
+    @AppStorage("gesturesEnabled") private var gesturesEnabled = true
     @AppStorage("swipeControlsAreSwapped") private var swipeControlsAreSwapped = false
     @AppStorage("selectedMetadataSource") private var selectedMetadataSourceRaw = MetadataSource.tmdb.rawValue
 
@@ -44,10 +45,15 @@ struct SettingsView: View {
             }
 
             Section("Gestures") {
+                Toggle("Enable gestures", isOn: $gesturesEnabled)
+                Text("Use vertical swipes on the player to control brightness and volume.")
+                    .font(.caption)
+                    .foregroundColor(gesturesEnabled ? .secondary : Color(.tertiaryLabel))
                 Toggle("Swap left/right for brightness and volume", isOn: $swipeControlsAreSwapped)
+                    .disabled(!gesturesEnabled)
                 Text(swipeControlsAreSwapped ? "Left: Volume • Right: Brightness" : "Left: Brightness • Right: Volume")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(gesturesEnabled ? .secondary : Color(.tertiaryLabel))
             }
 
             Section("Metadata") {
