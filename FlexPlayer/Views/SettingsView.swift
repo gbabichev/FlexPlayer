@@ -13,6 +13,7 @@ struct SettingsView: View {
     let onFetchMetadata: () -> Void
     let onClearMetadata: () -> Void
     let onSortLibrary: () -> Void
+    let onShowTutorial: () -> Void
 
     @AppStorage("nextEpisodeCountdownSeconds") private var countdownSeconds = 10
     @AppStorage("gesturesEnabled") private var gesturesEnabled = true
@@ -109,6 +110,7 @@ struct SettingsView: View {
                     Label("Fetch Metadata", systemImage: "arrow.down.circle")
                 }
                 .disabled(documentManager.isLoadingMetadata || !hasLibraryContent)
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
                 Button(role: .destructive) {
                     onClearMetadata()
@@ -116,6 +118,7 @@ struct SettingsView: View {
                     Label("Clear All Metadata", systemImage: "trash")
                 }
                 .disabled(!hasLibraryContent || documentManager.isLoadingMetadata)
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Shows: \(showsWithMetadataCount)/\(totalShows) with metadata")
@@ -204,6 +207,24 @@ struct SettingsView: View {
             }
 
             Section {
+                
+                Button {
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        onShowTutorial()
+                    }
+                } label: {
+                    HStack {
+                        Label("Help", systemImage: "questionmark.circle")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }                
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+
                 HStack {
                     Spacer()
                     Text(appVersionText)

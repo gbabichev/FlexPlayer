@@ -32,7 +32,7 @@ struct FlexPlayerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .sheet(isPresented: $appState.showTutorial) {
+                .fullScreenCover(isPresented: $appState.showTutorial) {
                     TutorialView(isPresented: $appState.showTutorial)
                 }
                 .onOpenURL { url in

@@ -43,6 +43,12 @@ Then open the app, and hit "Fetch Metadata" to get posters and content details.
 
 ## 📝 Changelog
 
+### 1.3.0
+- Improved PIP.
+- Consolidated Metadata into a single action. 
+- Enabled automatic library sorting. 
+- Enhanced Tutorial for new installs & enabled Help/Tutorial from the Settings. 
+
 ### 1.2.0
 - Added gestures for controlling brightness and volume from the video player. 
 

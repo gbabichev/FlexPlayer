@@ -406,6 +406,9 @@ struct ContentView: View {
                     },
                     onSortLibrary: {
                         documentManager.autoSortLibrary(modelContext: modelContext)
+                    },
+                    onShowTutorial: {
+                        appState.showTutorial = true
                     }
                 )
             }
