@@ -37,6 +37,31 @@ struct ContentView: View {
         }
         return items
     }
+
+    private var detailMetadataRefreshKey: String {
+        let showKey = documentManager.shows
+            .sorted { $0.name < $1.name }
+            .map { show in
+                let showStamp = Int(show.metadata?.lastUpdated.timeIntervalSince1970 ?? 0)
+                let episodeKey = show.files
+                    .sorted { $0.url.path < $1.url.path }
+                    .map { file in
+                        let episodeStamp = Int(file.metadata?.lastUpdated.timeIntervalSince1970 ?? 0)
+                        return "\(file.url.lastPathComponent)#\(episodeStamp)"
+                    }
+                    .joined(separator: ",")
+                return "\(show.name)#\(showStamp)#\(episodeKey)"
+            }
+            .joined(separator: "|")
+        let movieKey = documentManager.movies
+            .sorted { $0.url.path < $1.url.path }
+            .map { movie in
+                let movieStamp = Int(movie.metadata?.lastUpdated.timeIntervalSince1970 ?? 0)
+                return "\(movie.name)#\(movieStamp)"
+            }
+            .joined(separator: "|")
+        return "shows{\(showKey)}::movies{\(movieKey)}"
+    }
     
     var body: some View {
         NavigationSplitView {
@@ -216,14 +241,16 @@ struct ContentView: View {
             Group {
                 if let selectedItem = selectedItem {
                     switch selectedItem {
-                    case .show(let show):
+                    case .show(let selectedShow):
+                        let liveShow = documentManager.shows.first(where: { $0.name == selectedShow.name }) ?? selectedShow
                         FileListView(
-                            show: show,
+                            show: liveShow,
                             selectedVideoURL: $selectedVideoURL,
                             onRefresh: {
                                 refreshAfterDelete()
                             }
                         )
+                        .id("show-\(liveShow.name)-\(liveShow.metadata?.lastUpdated.timeIntervalSince1970 ?? 0)-\(liveShow.files.filter { $0.metadata != nil }.count)")
                         .environment(\.modelContext, modelContext)
 
                     case .movies:
@@ -274,6 +301,7 @@ struct ContentView: View {
                     }
                 }
             }
+            .id("detail-\(selectedItem?.id ?? "none")-\(detailMetadataRefreshKey)")
         }
         .fullScreenCover(isPresented: $showingVideoPlayer, onDismiss: {
             if !isPictureInPictureActive {
@@ -340,10 +368,10 @@ struct ContentView: View {
                 print("📺 Presenting ShowMetadataSearchView for: \(show.name)")
             }
         }
-        .onChange(of: documentManager.shows) { _, _ in
+        .onReceive(documentManager.$shows) { _ in
             updateSelection()
         }
-        .onChange(of: documentManager.movies) { _, _ in
+        .onReceive(documentManager.$movies) { _ in
             updateSelection()
 
             if let fileName = selectedMovieThumbnailFileName,

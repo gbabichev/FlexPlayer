@@ -115,7 +115,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Clear All Metadata", systemImage: "trash")
                 }
-                .disabled(!hasLibraryContent)
+                .disabled(!hasLibraryContent || documentManager.isLoadingMetadata)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Shows: \(showsWithMetadataCount)/\(totalShows) with metadata")

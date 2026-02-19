@@ -13,7 +13,8 @@ extension ContentView {
     
     func updateSelection() {
         guard let currentItem = selectedItem else {
-            selectedItem = sidebarItems.first
+            // Keep explicit "no selection" state; avoid jumping into a show
+            // when background refreshes (metadata fetch/clear) complete.
             return
         }
         

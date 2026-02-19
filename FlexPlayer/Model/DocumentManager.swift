@@ -48,15 +48,18 @@ class DocumentManager: ObservableObject {
             var loadedShows: [Show] = []
             var loadedMovies: [Movie] = []
 
-            let metadataDescriptor = FetchDescriptor<ShowMetadata>()
+            var metadataDescriptor = FetchDescriptor<ShowMetadata>()
+            metadataDescriptor.includePendingChanges = false
             let allShowMetadata = (try? modelContext.fetch(metadataDescriptor)) ?? []
             print("💾 Found \(allShowMetadata.count) ShowMetadata records in SwiftData")
 
-            let episodeDescriptor = FetchDescriptor<EpisodeMetadata>()
+            var episodeDescriptor = FetchDescriptor<EpisodeMetadata>()
+            episodeDescriptor.includePendingChanges = false
             let allEpisodeMetadata = (try? modelContext.fetch(episodeDescriptor)) ?? []
             print("💾 Found \(allEpisodeMetadata.count) EpisodeMetadata records in SwiftData")
 
-            let movieDescriptor = FetchDescriptor<MovieMetadata>()
+            var movieDescriptor = FetchDescriptor<MovieMetadata>()
+            movieDescriptor.includePendingChanges = false
             let allMovieMetadata = (try? modelContext.fetch(movieDescriptor)) ?? []
             print("💾 Found \(allMovieMetadata.count) MovieMetadata records in SwiftData")
 
@@ -317,18 +320,26 @@ class DocumentManager: ObservableObject {
     }
 
     func clearAllMetadata(modelContext: ModelContext) {
+        guard !isLoadingMetadata else {
+            print("⚠️ Cannot clear metadata while fetch is in progress")
+            return
+        }
+
         print("\n🗑️ ========== CLEARING ALL METADATA ==========")
 
         do {
-            let showDescriptor = FetchDescriptor<ShowMetadata>()
+            var showDescriptor = FetchDescriptor<ShowMetadata>()
+            showDescriptor.includePendingChanges = false
             let allShowMetadata = try modelContext.fetch(showDescriptor)
             print("📊 Found \(allShowMetadata.count) ShowMetadata records to delete")
 
-            let episodeDescriptor = FetchDescriptor<EpisodeMetadata>()
+            var episodeDescriptor = FetchDescriptor<EpisodeMetadata>()
+            episodeDescriptor.includePendingChanges = false
             let allEpisodeMetadata = try modelContext.fetch(episodeDescriptor)
             print("📊 Found \(allEpisodeMetadata.count) EpisodeMetadata records to delete")
 
-            let movieDescriptor = FetchDescriptor<MovieMetadata>()
+            var movieDescriptor = FetchDescriptor<MovieMetadata>()
+            movieDescriptor.includePendingChanges = false
             let allMovieMetadata = try modelContext.fetch(movieDescriptor)
             print("📊 Found \(allMovieMetadata.count) MovieMetadata records to delete")
 
@@ -348,6 +359,28 @@ class DocumentManager: ObservableObject {
             }
 
             try modelContext.save()
+            modelContext.processPendingChanges()
+
+            // Immediately reflect cleared metadata in the current in-memory view models.
+            shows = shows.map { show in
+                let filesWithoutMetadata = show.files.map { file in
+                    VideoFile(
+                        name: file.name,
+                        url: file.url,
+                        episodeInfo: file.episodeInfo,
+                        metadata: nil
+                    )
+                }
+                return Show(name: show.name, files: filesWithoutMetadata, metadata: nil)
+            }
+            movies = movies.map { movie in
+                Movie(name: movie.name, url: movie.url, metadata: nil)
+            }
+
+            let remainingShows = (try? modelContext.fetch(showDescriptor).count) ?? -1
+            let remainingEpisodes = (try? modelContext.fetch(episodeDescriptor).count) ?? -1
+            let remainingMovies = (try? modelContext.fetch(movieDescriptor).count) ?? -1
+            print("🧪 Remaining metadata after clear - shows: \(remainingShows), episodes: \(remainingEpisodes), movies: \(remainingMovies)")
 
             print("✅ Cleared all metadata and saved context")
             print("========================================\n")
