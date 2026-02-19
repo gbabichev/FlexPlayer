@@ -39,6 +39,12 @@ struct FlexPlayerApp: App {
                     handleIncomingURL(url)
                 }
                 .environmentObject(appState)
+#if DEBUG
+        .overlay(alignment: .bottomTrailing) {
+            BetaTag()
+                .padding(12)
+        }
+#endif
         }
         .modelContainer(sharedModelContainer)
     }
