@@ -12,10 +12,12 @@ struct SettingsView: View {
     let hasLibraryContent: Bool
     let onFetchMetadata: () -> Void
     let onClearMetadata: () -> Void
+    let onSortLibrary: () -> Void
 
     @AppStorage("nextEpisodeCountdownSeconds") private var countdownSeconds = 10
     @AppStorage("gesturesEnabled") private var gesturesEnabled = true
     @AppStorage("swipeControlsAreSwapped") private var swipeControlsAreSwapped = false
+    @AppStorage("autoSortEnabled") private var autoSortEnabled = false
     @Query private var allShowMetadata: [ShowMetadata]
     @Query private var allMovieMetadata: [MovieMetadata]
 
@@ -140,6 +142,60 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                }
+            }
+
+            Section("Library Organization") {
+                Toggle("Automatically sort on app launch", isOn: $autoSortEnabled)
+
+                Button {
+                    onSortLibrary()
+                } label: {
+                    Label("Sort Library Now", systemImage: "arrow.triangle.branch")
+                }
+                .disabled(documentManager.isSortingLibrary || !hasLibraryContent)
+
+                if documentManager.isSortingLibrary {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ProgressView()
+                        Text("Sorting files into Movies/Shows...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if let result = documentManager.lastSortResult {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if result.isClean {
+                            Text("Library is already sorted.")
+                        } else {
+                            Text("Sorting complete.")
+                        }
+
+                        Text("Scanned: \(result.scannedFiles)")
+                        Text("Moved: \(result.movedFiles)")
+                        Text("Already sorted: \(result.alreadySortedFiles)")
+                        Text("Unclassified: \(result.unclassifiedCount)")
+                        Text("Failed moves: \(result.failedCount)")
+
+                        if !result.unclassifiedFiles.isEmpty {
+                            let sample = result.unclassifiedFiles.prefix(3).joined(separator: ", ")
+                            Text("Sample unclassified: \(sample)")
+                        }
+
+                        if !result.failedMoves.isEmpty {
+                            let sample = result.failedMoves.prefix(2).joined(separator: " | ")
+                            Text("Sample failures: \(sample)")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+
+                if let errorMessage = documentManager.sortErrorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
                 }
             }
 

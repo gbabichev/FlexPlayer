@@ -7,10 +7,29 @@ import Foundation
 import SwiftData
 import Combine
 
+struct LibrarySortResult: Sendable {
+    let scannedFiles: Int
+    let movedFiles: Int
+    let alreadySortedFiles: Int
+    let unclassifiedFiles: [String]
+    let failedMoves: [String]
+
+    var unclassifiedCount: Int { unclassifiedFiles.count }
+    var failedCount: Int { failedMoves.count }
+
+    var isClean: Bool {
+        movedFiles == 0 && unclassifiedFiles.isEmpty && failedMoves.isEmpty
+    }
+}
+
 class DocumentManager: ObservableObject {
     @Published var shows: [Show] = []
     @Published var movies: [Movie] = []
     @Published var isLoadingMetadata = false
+    @Published var isSortingLibrary = false
+    @Published var lastSortResult: LibrarySortResult?
+    @Published var sortErrorMessage: String?
+    private var cachedModelContextForSort: ModelContext?
 
     func loadDocuments(modelContext: ModelContext, completion: (() -> Void)? = nil) {
         print("\n📚 ========== LOADING DOCUMENTS ==========")
@@ -217,6 +236,33 @@ class DocumentManager: ObservableObject {
             print("⚠️ Error loading documents: \(error)")
             DispatchQueue.main.async {
                 completion?()
+            }
+        }
+    }
+
+    func autoSortLibrary(modelContext: ModelContext) {
+        cachedModelContextForSort = modelContext
+        isSortingLibrary = true
+        sortErrorMessage = nil
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                let result = try LibraryFileSorter.sortLibraryFiles()
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.lastSortResult = result
+                    guard let refreshContext = self.cachedModelContextForSort else {
+                        self.isSortingLibrary = false
+                        return
+                    }
+                    self.loadDocuments(modelContext: refreshContext) { self.isSortingLibrary = false }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.sortErrorMessage = error.localizedDescription
+                    self.isSortingLibrary = false
+                }
             }
         }
     }
@@ -850,5 +896,174 @@ class DocumentManager: ObservableObject {
         } catch {
             print("   ⚠️ Error fetching metadata: \(error)")
         }
+    }
+}
+
+private enum LibraryFileSorter {
+    private enum SortTarget {
+        case episode(showTitle: String)
+        case movie
+        case unknown
+    }
+
+    private enum SortError: LocalizedError {
+        case documentsUnavailable
+
+        var errorDescription: String? {
+            switch self {
+            case .documentsUnavailable:
+                return "Could not access the Documents directory."
+            }
+        }
+    }
+
+    nonisolated static func sortLibraryFiles() throws -> LibrarySortResult {
+        let fileManager = FileManager.default
+        guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            throw SortError.documentsUnavailable
+        }
+
+        let moviesURL = documentsURL.appendingPathComponent("Movies")
+        let showsURL = documentsURL.appendingPathComponent("Shows")
+
+        try fileManager.createDirectory(at: moviesURL, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: showsURL, withIntermediateDirectories: true)
+
+        let videoFiles = collectVideoFilesForSorting(in: documentsURL)
+
+        var movedFiles = 0
+        var alreadySortedFiles = 0
+        var unclassifiedFiles: [String] = []
+        var failedMoves: [String] = []
+
+        for fileURL in videoFiles {
+            let fileName = fileURL.lastPathComponent
+            switch classifySortTarget(for: fileName) {
+            case .episode(let showTitle):
+                let showFolderName = sanitizeFolderName(showTitle)
+                let showFolder = showsURL.appendingPathComponent(showFolderName, isDirectory: true)
+                let showPrefix = showFolder.standardizedFileURL.path + "/"
+
+                if fileURL.standardizedFileURL.path.hasPrefix(showPrefix) {
+                    alreadySortedFiles += 1
+                    continue
+                }
+
+                do {
+                    try fileManager.createDirectory(at: showFolder, withIntermediateDirectories: true)
+                    let destination = uniqueDestinationURL(for: fileURL, in: showFolder)
+                    try fileManager.moveItem(at: fileURL, to: destination)
+                    movedFiles += 1
+                } catch {
+                    failedMoves.append("\(fileName): \(error.localizedDescription)")
+                }
+
+            case .movie:
+                let moviesPrefix = moviesURL.standardizedFileURL.path + "/"
+
+                if fileURL.standardizedFileURL.path.hasPrefix(moviesPrefix) {
+                    alreadySortedFiles += 1
+                    continue
+                }
+
+                do {
+                    let destination = uniqueDestinationURL(for: fileURL, in: moviesURL)
+                    try fileManager.moveItem(at: fileURL, to: destination)
+                    movedFiles += 1
+                } catch {
+                    failedMoves.append("\(fileName): \(error.localizedDescription)")
+                }
+
+            case .unknown:
+                unclassifiedFiles.append(fileName)
+            }
+        }
+
+        return LibrarySortResult(
+            scannedFiles: videoFiles.count,
+            movedFiles: movedFiles,
+            alreadySortedFiles: alreadySortedFiles,
+            unclassifiedFiles: unclassifiedFiles,
+            failedMoves: failedMoves
+        )
+    }
+
+    nonisolated private static func collectVideoFilesForSorting(in documentsURL: URL) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: documentsURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var files: [URL] = []
+        let importedPath = documentsURL.appendingPathComponent("Shows/Imported").standardizedFileURL.path
+
+        for case let fileURL as URL in enumerator {
+            let standardizedPath = fileURL.standardizedFileURL.path
+
+            if standardizedPath == importedPath || standardizedPath.hasPrefix(importedPath + "/") {
+                if (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+
+            if isVideoFileForSort(fileURL) {
+                files.append(fileURL)
+            }
+        }
+
+        return files
+    }
+
+    nonisolated private static func classifySortTarget(for fileName: String) -> SortTarget {
+        if let episodeInfo = EpisodeParser.parse(filename: fileName) {
+            return .episode(showTitle: episodeInfo.title)
+        }
+
+        let nameWithoutExtension = (fileName as NSString).deletingPathExtension
+        let trimmedName = nameWithoutExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        let moviePattern = #".+\(\d{4}\)$"#
+        if trimmedName.range(of: moviePattern, options: .regularExpression) != nil {
+            return .movie
+        }
+
+        return .unknown
+    }
+
+    nonisolated private static func uniqueDestinationURL(for sourceURL: URL, in destinationDirectory: URL) -> URL {
+        let fileManager = FileManager.default
+        let baseName = sourceURL.deletingPathExtension().lastPathComponent
+        let ext = sourceURL.pathExtension
+
+        var candidate = destinationDirectory.appendingPathComponent(sourceURL.lastPathComponent)
+        var counter = 1
+
+        while fileManager.fileExists(atPath: candidate.path) {
+            let nextName: String
+            if ext.isEmpty {
+                nextName = "\(baseName) (\(counter))"
+            } else {
+                nextName = "\(baseName) (\(counter)).\(ext)"
+            }
+            candidate = destinationDirectory.appendingPathComponent(nextName)
+            counter += 1
+        }
+
+        return candidate
+    }
+
+    nonisolated private static func sanitizeFolderName(_ name: String) -> String {
+        let forbiddenCharacters = CharacterSet(charactersIn: "/:\\*?\"<>|")
+        let cleaned = name.components(separatedBy: forbiddenCharacters).joined(separator: " ")
+        let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Unknown Show" : trimmed
+    }
+
+    nonisolated private static func isVideoFileForSort(_ url: URL) -> Bool {
+        let videoExtensions = ["mp4", "m4v", "mov", "avi", "mkv"]
+        return videoExtensions.contains(url.pathExtension.lowercased())
     }
 }

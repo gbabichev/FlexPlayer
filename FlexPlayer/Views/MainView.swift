@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var isPictureInPictureActive = false
     @State private var showToRematch: ShowToRematch?
     @State private var showSettings = false
+    @AppStorage("autoSortEnabled") private var autoSortEnabled = false
     @Query(sort: \ExternalVideo.lastPlayed, order: .reverse) var externalVideos: [ExternalVideo]
     @Query var allEpisodeMetadata: [EpisodeMetadata]
     @Query var allMovieMetadata: [MovieMetadata]
@@ -310,7 +311,11 @@ struct ContentView: View {
         }
         .onAppear {
             setupDocumentsDirectory()
-            documentManager.loadDocuments(modelContext: modelContext)
+            if autoSortEnabled {
+                documentManager.autoSortLibrary(modelContext: modelContext)
+            } else {
+                documentManager.loadDocuments(modelContext: modelContext)
+            }
             selectRandomThumbnails()
         }
         .onChange(of: documentManager.isLoadingMetadata) { oldValue, newValue in
@@ -370,6 +375,9 @@ struct ContentView: View {
                     },
                     onClearMetadata: {
                         documentManager.clearAllMetadata(modelContext: modelContext)
+                    },
+                    onSortLibrary: {
+                        documentManager.autoSortLibrary(modelContext: modelContext)
                     }
                 )
             }

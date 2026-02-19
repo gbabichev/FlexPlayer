@@ -210,7 +210,7 @@ enum TMDBError: Error {
 
 // Helper to parse your filename format: "Episode Name - S01E01.mp4"
 struct EpisodeParser {
-    static func parse(filename: String) -> (title: String, season: Int, episode: Int)? {
+    nonisolated static func parse(filename: String) -> (title: String, season: Int, episode: Int)? {
         // Remove file extension
         let nameWithoutExt = (filename as NSString).deletingPathExtension
         
