@@ -146,6 +146,10 @@ struct SettingsView: View {
             }
 
             Section("Library Organization") {
+                Text("Scans your Flex Player folder and moves files into Movies or Shows based on filename patterns. Helpful if you don't want to manually move files to the right folders!")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
                 Toggle("Automatically sort on app launch", isOn: $autoSortEnabled)
 
                 Button {
@@ -153,7 +157,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Sort Library Now", systemImage: "arrow.triangle.branch")
                 }
-                .disabled(documentManager.isSortingLibrary || !hasLibraryContent)
+                .disabled(documentManager.isSortingLibrary)
 
                 if documentManager.isSortingLibrary {
                     VStack(alignment: .leading, spacing: 6) {
