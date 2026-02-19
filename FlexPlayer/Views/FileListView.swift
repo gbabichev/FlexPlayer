@@ -37,7 +37,10 @@ struct FileListView: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         print("🎯 Tapped file: \(file.name)")
-                        selectedVideoURL = file.url
+                        selectedVideoURL = nil
+                        DispatchQueue.main.async {
+                            selectedVideoURL = file.url
+                        }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {

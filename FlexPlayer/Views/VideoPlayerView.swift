@@ -10,6 +10,9 @@ struct VideoPlayerView: View {
     let url: URL
     let playlistURLs: [URL]
     @Binding var currentURL: URL?
+    let onPictureInPictureStarted: () -> Void
+    let onPictureInPictureStopped: () -> Void
+    let onPictureInPictureRestoreRequested: (@escaping (Bool) -> Void) -> Void
     @Environment(\.modelContext) private var modelContext
 
     @State private var showCountdown = false
@@ -34,7 +37,10 @@ struct VideoPlayerView: View {
                 nextVideoImage: $nextVideoImage,
                 modelContext: modelContext,
                 gesturesEnabled: gesturesEnabled,
-                swipeControlsAreSwapped: swipeControlsAreSwapped
+                swipeControlsAreSwapped: swipeControlsAreSwapped,
+                onPictureInPictureStarted: onPictureInPictureStarted,
+                onPictureInPictureStopped: onPictureInPictureStopped,
+                onPictureInPictureRestoreRequested: onPictureInPictureRestoreRequested
             )
 
             if showCountdown, let nextTitle = nextVideoTitle {

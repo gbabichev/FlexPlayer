@@ -20,7 +20,10 @@ struct MovieListView: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         print("🎯 Tapped movie: \(movie.name)")
-                        selectedVideoURL = movie.url
+                        selectedVideoURL = nil
+                        DispatchQueue.main.async {
+                            selectedVideoURL = movie.url
+                        }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {

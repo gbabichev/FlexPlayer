@@ -21,6 +21,7 @@ struct ContentView: View {
     @State var selectedMovieThumbnail: Movie?
     @State var selectedMovieThumbnailFileName: String?
     @State var selectedExternalVideoThumbnail: ExternalVideo?
+    @State private var isPictureInPictureActive = false
     @State private var showToRematch: ShowToRematch?
     @State private var showSettings = false
     @Query(sort: \ExternalVideo.lastPlayed, order: .reverse) var externalVideos: [ExternalVideo]
@@ -268,13 +269,29 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(isPresented: $showingVideoPlayer, onDismiss: {
-            selectedVideoURL = nil
+            if !isPictureInPictureActive {
+                selectedVideoURL = nil
+            }
         }) {
             if let url = selectedVideoURL {
                 VideoPlayerView(
                     url: url,
                     playlistURLs: getPlaylistURLs(for: url),
-                    currentURL: $selectedVideoURL
+                    currentURL: $selectedVideoURL,
+                    onPictureInPictureStarted: {
+                        isPictureInPictureActive = true
+                        showingVideoPlayer = false
+                    },
+                    onPictureInPictureStopped: {
+                        isPictureInPictureActive = false
+                        if !showingVideoPlayer {
+                            selectedVideoURL = nil
+                        }
+                    },
+                    onPictureInPictureRestoreRequested: { completionHandler in
+                        showingVideoPlayer = true
+                        completionHandler(true)
+                    }
                 )
                 .ignoresSafeArea()
                 .environment(\.modelContext, modelContext)

@@ -20,6 +20,9 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
     let modelContext: ModelContext
     let gesturesEnabled: Bool
     let swipeControlsAreSwapped: Bool
+    let onPictureInPictureStarted: () -> Void
+    let onPictureInPictureStopped: () -> Void
+    let onPictureInPictureRestoreRequested: (@escaping (Bool) -> Void) -> Void
 
     private func getVideoTitle(for url: URL, modelContext: ModelContext) -> String? {
         // Try to find metadata for this video
@@ -51,61 +54,126 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
-        // Start accessing security-scoped resource for external files
-        let isSecurityScoped = url.startAccessingSecurityScopedResource()
-        if isSecurityScoped {
-            print("✅ Started accessing security-scoped resource")
-            context.coordinator.isSecurityScoped = true
-            context.coordinator.securityScopedURL = url
+        let coordinator = context.coordinator
+        let activePiPCoordinator = Coordinator.activePiPCoordinator
+        let canReusePiPController = activePiPCoordinator?.isPictureInPictureActive == true &&
+            activePiPCoordinator?.videoURL == url &&
+            activePiPCoordinator?.playerViewController != nil
+
+        let vc: AVPlayerViewController
+        if canReusePiPController, let existingVC = activePiPCoordinator?.playerViewController {
+            vc = existingVC
+            print("🔁 Reusing active PiP controller for fullscreen restore")
+        } else {
+            vc = AVPlayerViewController()
         }
 
-        // Fetch existing progress
-        let relativePath = getRelativePath(for: url)
-        let descriptor = FetchDescriptor<VideoProgress>(
-            predicate: #Predicate { progress in
-                progress.relativePath == relativePath
-            }
+        coordinator.modelContext = modelContext
+        coordinator.playlistURLs = playlistURLs
+        coordinator.videoURL = url
+        coordinator.gesturesEnabled = gesturesEnabled
+        coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
+        coordinator.onPictureInPictureStarted = onPictureInPictureStarted
+        coordinator.onPictureInPictureStopped = onPictureInPictureStopped
+        coordinator.onPictureInPictureRestoreRequested = onPictureInPictureRestoreRequested
+        coordinator.updateBindings(
+            showCountdown: $showCountdown,
+            nextVideoURL: $nextVideoURL,
+            nextVideoTitle: $nextVideoTitle,
+            nextVideoImage: $nextVideoImage
         )
-        let existingProgress = try? modelContext.fetch(descriptor).first
+        coordinator.playerViewController = vc
+        vc.delegate = coordinator
 
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
-            try AVAudioSession.sharedInstance().setActive(true, options: [])
-        } catch {
-            print("AVAudioSession setup failed: \(error)")
+        let canReusePiPPlayer = activePiPCoordinator?.isPictureInPictureActive == true &&
+            activePiPCoordinator?.videoURL == url &&
+            activePiPCoordinator?.playerViewController?.player != nil
+
+        let player: AVPlayer
+        let isReusingPiPPlayer: Bool
+        if canReusePiPPlayer,
+           let activePiPCoordinator,
+           let pipPlayer = activePiPCoordinator.playerViewController?.player {
+            isReusingPiPPlayer = true
+            player = pipPlayer
+            coordinator.existingProgress = activePiPCoordinator.existingProgress
+            coordinator.isSecurityScoped = activePiPCoordinator.isSecurityScoped
+            coordinator.securityScopedURL = activePiPCoordinator.securityScopedURL
+
+            if let oldObserver = activePiPCoordinator.timeObserver {
+                pipPlayer.removeTimeObserver(oldObserver)
+                activePiPCoordinator.timeObserver = nil
+            }
+
+            if activePiPCoordinator !== coordinator {
+                activePiPCoordinator.detachTransientUI()
+            }
+
+            activePiPCoordinator.didHandOffPlaybackForRestore = true
+            coordinator.didHandOffPlaybackForRestore = true
+            Coordinator.activePiPCoordinator = coordinator
+            if pipPlayer.rate == 0 {
+                pipPlayer.playImmediately(atRate: 1.0)
+                print("🔁 Reused PiP player was paused, resumed immediately")
+            }
+            print("🔁 Reusing active PiP player for fullscreen restore")
+            print("🔁 PiP handoff player rate: \(pipPlayer.rate)")
+        } else {
+            isReusingPiPPlayer = false
+            do {
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
+                try AVAudioSession.sharedInstance().setActive(true, options: [])
+            } catch {
+                print("AVAudioSession setup failed: \(error)")
+            }
+
+            // Start accessing security-scoped resource for external files
+            let isSecurityScoped = url.startAccessingSecurityScopedResource()
+            if isSecurityScoped {
+                print("✅ Started accessing security-scoped resource")
+                coordinator.isSecurityScoped = true
+                coordinator.securityScopedURL = url
+            } else {
+                coordinator.isSecurityScoped = false
+                coordinator.securityScopedURL = nil
+            }
+
+            // Fetch existing progress
+            let relativePath = getRelativePath(for: url)
+            let descriptor = FetchDescriptor<VideoProgress>(
+                predicate: #Predicate { progress in
+                    progress.relativePath == relativePath
+                }
+            )
+            let existingProgress = try? modelContext.fetch(descriptor).first
+            coordinator.existingProgress = existingProgress
+
+            let playerItem = AVPlayerItem(url: url)
+
+            // Set metadata for the video
+            if let title = getVideoTitle(for: url, modelContext: modelContext) {
+                let titleMetadata = AVMutableMetadataItem()
+                titleMetadata.identifier = .commonIdentifierTitle
+                titleMetadata.value = title as NSString
+                titleMetadata.extendedLanguageTag = "und"
+                playerItem.externalMetadata = [titleMetadata]
+            }
+
+            let freshPlayer = AVPlayer(playerItem: playerItem)
+            if let progress = existingProgress, progress.currentTime > 0 && !progress.isCompleted {
+                let time = CMTime(seconds: progress.currentTime, preferredTimescale: 600)
+                freshPlayer.seek(to: time)
+                print("▶️ Resuming from \(Int(progress.currentTime))s")
+            }
+            player = freshPlayer
         }
 
-        let vc = AVPlayerViewController()
-        let playerItem = AVPlayerItem(url: url)
-
-        // Set metadata for the video
-        if let title = getVideoTitle(for: url, modelContext: modelContext) {
-            let titleMetadata = AVMutableMetadataItem()
-            titleMetadata.identifier = .commonIdentifierTitle
-            titleMetadata.value = title as NSString
-            titleMetadata.extendedLanguageTag = "und"
-            playerItem.externalMetadata = [titleMetadata]
-        }
-
-        let player = AVPlayer(playerItem: playerItem)
         vc.player = player
         vc.showsPlaybackControls = true
         vc.allowsPictureInPicturePlayback = true
         player.allowsExternalPlayback = true
-        
-        if let progress = existingProgress, progress.currentTime > 0 && !progress.isCompleted {
-            let time = CMTime(seconds: progress.currentTime, preferredTimescale: 600)
-            player.seek(to: time)
-            print("▶️ Resuming from \(Int(progress.currentTime))s")
-        }
-        
-        let interval = CMTime(seconds: 1.0, preferredTimescale: 600)
-        let coordinator = context.coordinator
-        coordinator.modelContext = modelContext
-        coordinator.existingProgress = existingProgress
-        coordinator.playlistURLs = playlistURLs
-        coordinator.videoURL = url
 
+        let interval = CMTime(seconds: 1.0, preferredTimescale: 600)
         let observer = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak player, weak coordinator] time in
             guard let player = player, let coordinator = coordinator else { return }
             Task { @MainActor in
@@ -113,8 +181,6 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             }
         }
         coordinator.timeObserver = observer
-        coordinator.gesturesEnabled = gesturesEnabled
-        coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
 
         // Observe when video ends
         NotificationCenter.default.addObserver(
@@ -127,14 +193,26 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             }
         }
 
-        player.play()
-        context.coordinator.attachGestures(to: vc)
+        if !isReusingPiPPlayer {
+            player.play()
+        }
+        coordinator.attachGestures(to: vc)
         return vc
     }
 
     func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
         context.coordinator.gesturesEnabled = gesturesEnabled
         context.coordinator.swipeControlsAreSwapped = swipeControlsAreSwapped
+        context.coordinator.onPictureInPictureStarted = onPictureInPictureStarted
+        context.coordinator.onPictureInPictureStopped = onPictureInPictureStopped
+        context.coordinator.onPictureInPictureRestoreRequested = onPictureInPictureRestoreRequested
+        context.coordinator.updateBindings(
+            showCountdown: $showCountdown,
+            nextVideoURL: $nextVideoURL,
+            nextVideoTitle: $nextVideoTitle,
+            nextVideoImage: $nextVideoImage
+        )
+        context.coordinator.playerViewController = vc
         // Check if URL changed (for auto-play next episode)
         if context.coordinator.videoURL != url {
             print("🔄 Switching to new video: \(url.lastPathComponent)")
@@ -221,20 +299,34 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
     }
 
     static func dismantleUIViewController(_ vc: AVPlayerViewController, coordinator: Coordinator) {
-        if let observer = coordinator.timeObserver {
+        let isPictureInPictureActive = coordinator.isPictureInPictureActive
+        if !isPictureInPictureActive, let observer = coordinator.timeObserver {
             vc.player?.removeTimeObserver(observer)
+            coordinator.timeObserver = nil
         }
-        vc.player?.pause()
+
+        if !isPictureInPictureActive {
+            vc.player?.pause()
+        }
 
         // Stop accessing security-scoped resource
-        if coordinator.isSecurityScoped, let url = coordinator.securityScopedURL {
+        if !isPictureInPictureActive,
+           coordinator.isSecurityScoped,
+           let url = coordinator.securityScopedURL {
             url.stopAccessingSecurityScopedResource()
             print("✅ Stopped accessing security-scoped resource")
         }
     }
     
     func makeCoordinator() -> Coordinator {
-        Coordinator(
+        if let active = Coordinator.activePiPCoordinator,
+           active.isPictureInPictureActive,
+           active.videoURL == url,
+           active.playerViewController != nil {
+            return active
+        }
+
+        return Coordinator(
             showCountdown: $showCountdown,
             nextVideoURL: $nextVideoURL,
             nextVideoTitle: $nextVideoTitle,
@@ -242,7 +334,8 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         )
     }
 
-    class Coordinator {
+    class Coordinator: NSObject {
+        static var activePiPCoordinator: Coordinator?
         var timeObserver: Any?
         var modelContext: ModelContext?
         var existingProgress: VideoProgress?
@@ -263,12 +356,27 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
         private var panSide: PanSide?
         var gesturesEnabled = true
         var swipeControlsAreSwapped = false
+        var onPictureInPictureStarted: (() -> Void)?
+        var onPictureInPictureStopped: (() -> Void)?
+        var onPictureInPictureRestoreRequested: ((@escaping (Bool) -> Void) -> Void)?
+        var isPictureInPictureActive = false
+        private var requestedDismissForPiP = false
+        weak var playerViewController: AVPlayerViewController?
+        var didHandOffPlaybackForRestore = false
         private weak var hudView: UIView?
         private weak var hudIconView: UIImageView?
         private weak var hudLabel: UILabel?
         private var hudHideWorkItem: DispatchWorkItem?
 
         init(showCountdown: Binding<Bool>, nextVideoURL: Binding<URL?>, nextVideoTitle: Binding<String?>, nextVideoImage: Binding<Data?>) {
+            self.showCountdownBinding = showCountdown
+            self.nextVideoURLBinding = nextVideoURL
+            self.nextVideoTitleBinding = nextVideoTitle
+            self.nextVideoImageBinding = nextVideoImage
+            super.init()
+        }
+
+        func updateBindings(showCountdown: Binding<Bool>, nextVideoURL: Binding<URL?>, nextVideoTitle: Binding<String?>, nextVideoImage: Binding<Data?>) {
             self.showCountdownBinding = showCountdown
             self.nextVideoURLBinding = nextVideoURL
             self.nextVideoTitleBinding = nextVideoTitle
@@ -532,6 +640,95 @@ struct VideoPlayerRepresentable: UIViewControllerRepresentable {
             }
             hudHideWorkItem = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: workItem)
+        }
+
+        func detachTransientUI() {
+            if let panGesture = panGesture {
+                gestureHostView?.removeGestureRecognizer(panGesture)
+            }
+            panGesture = nil
+            gestureHostView = nil
+
+            volumeView?.removeFromSuperview()
+            volumeView = nil
+            volumeSlider = nil
+
+            hudHideWorkItem?.cancel()
+            hudView?.removeFromSuperview()
+            hudView = nil
+            hudIconView = nil
+            hudLabel = nil
+        }
+    }
+}
+
+extension VideoPlayerRepresentable.Coordinator: AVPlayerViewControllerDelegate {
+    private func ensurePlaybackContinues(_ player: AVPlayer?, reason: String) {
+        guard let player else { return }
+        if player.rate == 0 {
+            player.playImmediately(atRate: 1.0)
+            print("🔁 \(reason): player was paused, resumed immediately")
+        } else {
+            print("🔁 \(reason): player already playing at rate \(player.rate)")
+        }
+    }
+
+    func playerViewControllerShouldAutomaticallyDismissAtPictureInPictureStart(_ playerViewController: AVPlayerViewController) -> Bool {
+        true
+    }
+
+    func playerViewControllerDidStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
+        guard !requestedDismissForPiP else { return }
+        requestedDismissForPiP = true
+        isPictureInPictureActive = true
+        didHandOffPlaybackForRestore = false
+        Self.activePiPCoordinator = self
+        DispatchQueue.main.async { [weak self] in
+            self?.onPictureInPictureStarted?()
+        }
+    }
+
+    func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
+        requestedDismissForPiP = false
+        isPictureInPictureActive = false
+
+        if didHandOffPlaybackForRestore {
+            // Ensure playback continues seamlessly after PiP -> fullscreen handoff.
+            ensurePlaybackContinues(playerViewController.player, reason: "PiP didStop handoff")
+        } else {
+            if let observer = timeObserver {
+                playerViewController.player?.removeTimeObserver(observer)
+                timeObserver = nil
+            }
+            if isSecurityScoped, let url = securityScopedURL {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        isSecurityScoped = false
+        securityScopedURL = nil
+        didHandOffPlaybackForRestore = false
+        Self.activePiPCoordinator = nil
+        DispatchQueue.main.async { [weak self] in
+            self?.onPictureInPictureStopped?()
+        }
+    }
+
+    func playerViewController(
+        _ playerViewController: AVPlayerViewController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        ensurePlaybackContinues(playerViewController.player, reason: "PiP restore requested")
+        guard let onRestore = onPictureInPictureRestoreRequested else {
+            completionHandler(false)
+            return
+        }
+        onRestore(completionHandler)
+    }
+
+    func playerViewControllerWillStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
+        if didHandOffPlaybackForRestore {
+            ensurePlaybackContinues(playerViewController.player, reason: "PiP willStop handoff")
         }
     }
 }

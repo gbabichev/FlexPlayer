@@ -76,7 +76,10 @@ struct ExternalVideoListView: View {
             video.lastPlayed = Date()
             try? modelContext.save()
 
-            selectedVideoURL = url
+            selectedVideoURL = nil
+            DispatchQueue.main.async {
+                selectedVideoURL = url
+            }
 
         } catch {
             print("⚠️ Failed to resolve bookmark: \(error)")
