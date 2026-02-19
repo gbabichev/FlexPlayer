@@ -30,30 +30,47 @@ struct SettingsView: View {
         )
     }
 
+    private var appVersionText: String {
+        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "Version \(shortVersion) (\(buildNumber))"
+    }
+
     var body: some View {
         Form {
             Section("Playback") {
-                Picker("Next Episode Countdown", selection: $countdownSeconds) {
-                    Text("3 seconds").tag(3)
-                    Text("5 seconds").tag(5)
-                    Text("10 seconds").tag(10)
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("Next Episode Countdown", selection: $countdownSeconds) {
+                        Text("3 seconds").tag(3)
+                        Text("5 seconds").tag(5)
+                        Text("10 seconds").tag(10)
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text("How long the Next Episode overlay waits before auto-playing.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                .pickerStyle(.segmented)
-                Text("How long the Next Episode overlay waits before auto-playing.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Section("Gestures") {
-                Toggle("Enable gestures", isOn: $gesturesEnabled)
-                Text("Use vertical swipes on the player to control brightness and volume.")
-                    .font(.caption)
-                    .foregroundColor(gesturesEnabled ? .secondary : Color(.tertiaryLabel))
-                Toggle("Swap left/right for brightness and volume", isOn: $swipeControlsAreSwapped)
-                    .disabled(!gesturesEnabled)
-                Text(swipeControlsAreSwapped ? "Left: Volume • Right: Brightness" : "Left: Brightness • Right: Volume")
-                    .font(.caption)
-                    .foregroundColor(gesturesEnabled ? .secondary : Color(.tertiaryLabel))
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Enable gestures", isOn: $gesturesEnabled)
+                    Text("Use vertical swipes on the player to control brightness and volume.")
+                        .font(.caption)
+                        .foregroundColor(gesturesEnabled ? .secondary : Color(.tertiaryLabel))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Swap left/right for brightness and volume", isOn: $swipeControlsAreSwapped)
+                    Text(swipeControlsAreSwapped ? "Left: Volume • Right: Brightness" : "Left: Brightness • Right: Volume")
+                        .font(.caption)
+                        .foregroundColor(gesturesEnabled ? .secondary : Color(.tertiaryLabel))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .disabled(!gesturesEnabled)
             }
 
             Section("Metadata") {
@@ -86,6 +103,16 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                }
+            }
+
+            Section {
+                HStack {
+                    Spacer()
+                    Text(appVersionText)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    Spacer()
                 }
             }
         }
