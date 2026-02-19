@@ -14,8 +14,6 @@ struct ExternalVideoListView: View {
     @Query private var allShowMetadata: [ShowMetadata]
     @Query private var allEpisodeMetadata: [EpisodeMetadata]
     @Query private var allMovieMetadata: [MovieMetadata]
-    @State private var showDeleteAlert = false
-    @State private var videoToDelete: ExternalVideo?
 
     var body: some View {
         List {
@@ -33,8 +31,7 @@ struct ExternalVideoListView: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
-                            videoToDelete = video
-                            showDeleteAlert = true
+                            deleteVideo(video)
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -63,14 +60,6 @@ struct ExternalVideoListView: View {
         }
         .navigationTitle("External Videos")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Delete Reference?", isPresented: $showDeleteAlert, presenting: videoToDelete) { video in
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                deleteVideo(video)
-            }
-        } message: { video in
-            Text("This will remove the reference to \"\(video.fileName)\". The original file will not be deleted.")
-        }
     }
 
     private func playExternalVideo(_ video: ExternalVideo) {

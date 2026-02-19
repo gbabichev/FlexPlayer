@@ -10,8 +10,6 @@ struct FileListView: View {
     @Binding var selectedVideoURL: URL?
     @Environment(\.modelContext) private var modelContext
     @Query private var allProgress: [VideoProgress]
-    @State private var showDeleteAlert = false
-    @State private var fileToDelete: VideoFile?
     var onRefresh: () -> Void
     
     private var sortedFiles: [VideoFile] {
@@ -43,8 +41,7 @@ struct FileListView: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
-                            fileToDelete = file
-                            showDeleteAlert = true
+                            deleteFile(file)
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -75,8 +72,7 @@ struct FileListView: View {
                         }
                         
                         Button(role: .destructive) {
-                            fileToDelete = file
-                            showDeleteAlert = true
+                            deleteFile(file)
                         } label: {
                             Label("Delete File", systemImage: "trash")
                         }
@@ -89,14 +85,6 @@ struct FileListView: View {
         }
         .navigationTitle(show.metadata?.displayName ?? show.name)
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Delete Video?", isPresented: $showDeleteAlert, presenting: fileToDelete) { file in
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                deleteFile(file)
-            }
-        } message: { file in
-            Text("Are you sure you want to delete \"\(file.metadata?.displayName ?? file.name)\"? This cannot be undone.")
-        }
     }
     
     private func getProgress(for file: VideoFile) -> VideoProgress? {

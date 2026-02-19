@@ -10,8 +10,6 @@ struct MovieListView: View {
     @Binding var selectedVideoURL: URL?
     @Environment(\.modelContext) private var modelContext
     @Query private var allProgress: [VideoProgress]
-    @State private var showDeleteAlert = false
-    @State private var movieToDelete: Movie?
     @State private var movieToRematch: MovieToRematch?
     var onRefresh: () -> Void
     
@@ -26,8 +24,7 @@ struct MovieListView: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
-                            movieToDelete = movie
-                            showDeleteAlert = true
+                            deleteMovie(movie)
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -66,8 +63,7 @@ struct MovieListView: View {
                         }
 
                         Button(role: .destructive) {
-                            movieToDelete = movie
-                            showDeleteAlert = true
+                            deleteMovie(movie)
                         } label: {
                             Label("Delete File", systemImage: "trash")
                         }
@@ -80,14 +76,6 @@ struct MovieListView: View {
         }
         .navigationTitle("Movies")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Delete Movie?", isPresented: $showDeleteAlert, presenting: movieToDelete) { movie in
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                deleteMovie(movie)
-            }
-        } message: { movie in
-            Text("Are you sure you want to delete \"\(movie.metadata?.displayName ?? movie.name)\"? This cannot be undone.")
-        }
         .sheet(item: $movieToRematch) { movie in
             MetadataSearchView(movieName: movie.name) { selectedMovie in
                 updateMovieMetadataByURL(url: movie.url, with: selectedMovie)
