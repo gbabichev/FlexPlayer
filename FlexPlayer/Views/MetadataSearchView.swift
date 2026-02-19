@@ -20,7 +20,16 @@ struct MetadataSearchView: View {
                 // Search bar
                 HStack {
                     TextField("Search for movie", text: $searchQuery)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding(.horizontal, 14)
+                        .frame(height: 44)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        )
                         .submitLabel(.search)
                         .onSubmit {
                             performSearch()
