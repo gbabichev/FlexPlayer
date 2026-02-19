@@ -11,11 +11,18 @@ struct MovieListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var allProgress: [VideoProgress]
     @State private var movieToRematch: MovieToRematch?
+    @State private var locallyDeletedMovieURLs: Set<URL> = []
+    @State private var refreshWorkItem: DispatchWorkItem?
     var onRefresh: () -> Void
+    var onMovieDeleted: (URL) -> Void = { _ in }
+
+    private var visibleMovies: [Movie] {
+        movies.filter { !locallyDeletedMovieURLs.contains($0.url) }
+    }
     
     var body: some View {
         List {
-            ForEach(movies) { movie in
+            ForEach(visibleMovies) { movie in
                 MovieRowView(movie: movie, progress: getProgress(for: movie))
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -79,6 +86,13 @@ struct MovieListView: View {
         }
         .navigationTitle("Movies")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            refreshWorkItem?.cancel()
+        }
+        .onChange(of: movies.map(\.url)) { _, urls in
+            let currentURLs = Set(urls)
+            locallyDeletedMovieURLs.formIntersection(currentURLs)
+        }
         .sheet(item: $movieToRematch) { movie in
             MetadataSearchView(movieName: movie.name) { selectedMovie in
                 updateMovieMetadataByURL(url: movie.url, with: selectedMovie)
@@ -127,6 +141,10 @@ struct MovieListView: View {
     }
 
     private func deleteMovie(_ movie: Movie) {
+        withAnimation {
+            _ = locallyDeletedMovieURLs.insert(movie.url)
+        }
+
         do {
             try FileManager.default.removeItem(at: movie.url)
             print("✅ Deleted movie: \(movie.name)")
@@ -141,11 +159,24 @@ struct MovieListView: View {
 
             try modelContext.save()
 
-            onRefresh()
+            onMovieDeleted(movie.url)
+            scheduleRefreshAfterDelete()
 
         } catch {
+            withAnimation {
+                _ = locallyDeletedMovieURLs.remove(movie.url)
+            }
             print("⚠️ Failed to delete movie: \(error)")
         }
+    }
+
+    private func scheduleRefreshAfterDelete() {
+        refreshWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            onRefresh()
+        }
+        refreshWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
     }
 
     private func updateMovieMetadataByURL(url: URL, with selectedMovie: UnifiedMovie) {

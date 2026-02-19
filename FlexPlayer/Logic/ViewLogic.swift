@@ -12,7 +12,10 @@ import AVKit
 extension ContentView {
     
     func updateSelection() {
-        guard let currentItem = selectedItem else { return }
+        guard let currentItem = selectedItem else {
+            selectedItem = sidebarItems.first
+            return
+        }
         
         switch currentItem {
         case .show(let show):
@@ -22,34 +25,24 @@ extension ContentView {
         case .movies:
             if !documentManager.movies.isEmpty {
                 selectedItem = .movies
+            } else {
+                selectedItem = nil
             }
         case .externalVideos:
             if !externalVideos.isEmpty {
                 selectedItem = .externalVideos
+            } else {
+                selectedItem = nil
             }
+        }
+
+        if selectedItem == nil {
+            selectedItem = sidebarItems.first
         }
     }
     
     func refreshAfterDelete() {
-        let currentItem = selectedItem
         documentManager.loadDocuments(modelContext: modelContext)
-        
-        if let item = currentItem {
-            switch item {
-            case .show(let show):
-                selectedItem = documentManager.shows
-                    .first { $0.name == show.name }
-                    .map { .show($0) }
-            case .movies:
-                if !documentManager.movies.isEmpty {
-                    selectedItem = .movies
-                }
-            case .externalVideos:
-                if !externalVideos.isEmpty {
-                    selectedItem = .externalVideos
-                }
-            }
-        }
     }
     
     func selectRandomThumbnails() {
@@ -88,17 +81,6 @@ extension ContentView {
     func getMovieMetadataForExternal(_ video: ExternalVideo) -> MovieMetadata? {
         guard let tmdbId = video.movieTmdbId else { return nil }
         return allMovieMetadata.first { $0.tmdbId == tmdbId }
-    }
-    
-    func deleteAlertMessage(for item: SidebarItem) -> String {
-        switch item {
-        case .show(let show):
-            return "Are you sure you want to delete all \(show.files.count) episode(s) from \"\(show.metadata?.displayName ?? show.name)\"? This cannot be undone."
-        case .movies:
-            return "Are you sure you want to delete all \(documentManager.movies.count) movie(s)? This cannot be undone."
-        case .externalVideos:
-            return "Are you sure you want to delete all \(externalVideos.count) external video reference(s)? The original files will not be deleted."
-        }
     }
     
     func deleteAllInItem(_ item: SidebarItem) {
@@ -151,7 +133,20 @@ extension ContentView {
     }
     
     func deleteAllMovies() {
-        for movie in documentManager.movies {
+        let moviesToDelete = documentManager.movies
+        guard !moviesToDelete.isEmpty else { return }
+
+        withAnimation {
+            documentManager.movies = []
+            selectedMovieThumbnail = nil
+            selectedMovieThumbnailFileName = nil
+
+            if case .movies? = selectedItem {
+                selectedItem = sidebarItems.first
+            }
+        }
+
+        for movie in moviesToDelete {
             do {
                 try FileManager.default.removeItem(at: movie.url)
                 print("✅ Deleted movie: \(movie.name)")
@@ -177,10 +172,10 @@ extension ContentView {
         }
         
         try? modelContext.save()
-        
-        // Clear selection and refresh
-        selectedItem = nil
-        documentManager.loadDocuments(modelContext: modelContext)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            documentManager.loadDocuments(modelContext: modelContext)
+        }
     }
     
     func deleteAllExternalVideos() {

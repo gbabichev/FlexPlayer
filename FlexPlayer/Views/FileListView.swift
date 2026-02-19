@@ -10,6 +10,8 @@ struct FileListView: View {
     @Binding var selectedVideoURL: URL?
     @Environment(\.modelContext) private var modelContext
     @Query private var allProgress: [VideoProgress]
+    @State private var locallyDeletedFileURLs: Set<URL> = []
+    @State private var refreshWorkItem: DispatchWorkItem?
     var onRefresh: () -> Void
     
     private var sortedFiles: [VideoFile] {
@@ -29,10 +31,14 @@ struct FileListView: View {
             }
         }
     }
+
+    private var visibleFiles: [VideoFile] {
+        sortedFiles.filter { !locallyDeletedFileURLs.contains($0.url) }
+    }
     
     var body: some View {
         List {
-            ForEach(sortedFiles) { file in
+            ForEach(visibleFiles) { file in
                 FileRowView(file: file, progress: getProgress(for: file))
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -88,6 +94,13 @@ struct FileListView: View {
         }
         .navigationTitle(show.metadata?.displayName ?? show.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            refreshWorkItem?.cancel()
+        }
+        .onChange(of: show.files.map(\.url)) { _, urls in
+            let currentURLs = Set(urls)
+            locallyDeletedFileURLs.formIntersection(currentURLs)
+        }
     }
     
     private func getProgress(for file: VideoFile) -> VideoProgress? {
@@ -128,6 +141,10 @@ struct FileListView: View {
     }
 
     private func deleteFile(_ file: VideoFile) {
+        withAnimation {
+            _ = locallyDeletedFileURLs.insert(file.url)
+        }
+
         do {
             try FileManager.default.removeItem(at: file.url)
             print("✅ Deleted file: \(file.name)")
@@ -141,11 +158,23 @@ struct FileListView: View {
             }
             
             try modelContext.save()
-            
-            onRefresh()
+
+            scheduleRefreshAfterDelete()
             
         } catch {
+            withAnimation {
+                _ = locallyDeletedFileURLs.remove(file.url)
+            }
             print("⚠️ Failed to delete file: \(error)")
         }
+    }
+
+    private func scheduleRefreshAfterDelete() {
+        refreshWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            onRefresh()
+        }
+        refreshWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
     }
 }

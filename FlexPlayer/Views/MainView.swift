@@ -16,8 +16,6 @@ struct ContentView: View {
     @State var selectedItem: SidebarItem?
     @State var selectedVideoURL: URL?
     @State var showingVideoPlayer = false
-    @State var showDeleteAlert = false
-    @State var itemToDelete: SidebarItem?
     @State var selectedMovieThumbnail: Movie?
     @State var selectedMovieThumbnailFileName: String?
     @State var selectedExternalVideoThumbnail: ExternalVideo?
@@ -78,17 +76,16 @@ struct ContentView: View {
                             case .movies:
                                 HStack(spacing: 12) {
                                     // Look up movie by stable fileName instead of using the Movie struct directly
-                                    // Fallback to random movie if no fileName is set
+                                    // Fallback to first movie with poster data if no fileName is set
                                     let selectedMovie: Movie? = {
                                         if let fileName = selectedMovieThumbnailFileName,
                                            let movie = documentManager.movies.first(where: { $0.name == fileName }),
                                            movie.metadata?.posterData != nil {
                                             return movie
                                         }
-                                        // Fallback: pick a random movie with poster data
+                                        // Fallback: pick first movie with poster data to avoid churn while list updates
                                         return documentManager.movies
-                                            .filter({ $0.metadata?.posterData != nil })
-                                            .randomElement()
+                                            .first(where: { $0.metadata?.posterData != nil })
                                     }()
 
                                     if let movie = selectedMovie,
@@ -191,8 +188,7 @@ struct ContentView: View {
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
-                                itemToDelete = item
-                                showDeleteAlert = true
+                                deleteAllInItem(item)
                             } label: {
                                 Label("Delete All", systemImage: "trash")
                             }
@@ -228,7 +224,6 @@ struct ContentView: View {
                             }
                         )
                         .environment(\.modelContext, modelContext)
-                        .id(show.id)
 
                     case .movies:
                         MovieListView(
@@ -236,6 +231,17 @@ struct ContentView: View {
                             selectedVideoURL: $selectedVideoURL,
                             onRefresh: {
                                 refreshAfterDelete()
+                            },
+                            onMovieDeleted: { deletedURL in
+                                documentManager.movies.removeAll { $0.url == deletedURL }
+
+                                if let currentFileName = selectedMovieThumbnailFileName,
+                                   currentFileName == deletedURL.lastPathComponent {
+                                    selectedMovieThumbnailFileName = documentManager.movies
+                                        .filter({ $0.metadata?.posterData != nil })
+                                        .randomElement()?
+                                        .name
+                                }
                             }
                         )
                         .environment(\.modelContext, modelContext)
@@ -321,14 +327,6 @@ struct ContentView: View {
                 }
             }
         }
-        .alert("Delete All?", isPresented: $showDeleteAlert, presenting: itemToDelete) { item in
-            Button("Cancel", role: .cancel) { }
-            Button("Delete All", role: .destructive) {
-                deleteAllInItem(item)
-            }
-        } message: { item in
-            Text(deleteAlertMessage(for: item))
-        }
         .sheet(item: $showToRematch) { show in
             ShowMetadataSearchView(showName: show.name) { selectedShow in
                 updateShowMetadata(for: show.name, with: selectedShow)
@@ -342,6 +340,16 @@ struct ContentView: View {
         }
         .onChange(of: documentManager.movies) { _, _ in
             updateSelection()
+
+            if let fileName = selectedMovieThumbnailFileName,
+               documentManager.movies.contains(where: { $0.name == fileName && $0.metadata?.posterData != nil }) {
+                return
+            }
+
+            selectedMovieThumbnailFileName = documentManager.movies
+                .filter({ $0.metadata?.posterData != nil })
+                .randomElement()?
+                .name
         }
         .onChange(of: documentManager.selectedSource) { _, newValue in
             MetadataService.shared.selectedSource = newValue

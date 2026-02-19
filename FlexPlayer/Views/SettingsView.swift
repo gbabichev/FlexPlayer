@@ -17,8 +17,6 @@ struct SettingsView: View {
     @AppStorage("swipeControlsAreSwapped") private var swipeControlsAreSwapped = false
     @AppStorage("selectedMetadataSource") private var selectedMetadataSourceRaw = MetadataSource.tmdb.rawValue
 
-    @State private var showClearMetadataAlert = false
-
     private var selectedSourceBinding: Binding<MetadataSource> {
         Binding(
             get: { MetadataSource(rawValue: selectedMetadataSourceRaw) ?? .tmdb },
@@ -90,7 +88,7 @@ struct SettingsView: View {
                 .disabled(documentManager.isLoadingMetadata || !hasLibraryContent)
 
                 Button(role: .destructive) {
-                    showClearMetadataAlert = true
+                    onClearMetadata()
                 } label: {
                     Label("Clear All Metadata", systemImage: "trash")
                 }
@@ -124,14 +122,6 @@ struct SettingsView: View {
                     dismiss()
                 }
             }
-        }
-        .alert("Clear All Metadata?", isPresented: $showClearMetadataAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Clear", role: .destructive) {
-                onClearMetadata()
-            }
-        } message: {
-            Text("This will remove all show posters, episode thumbnails, movie posters, titles, and descriptions. Your video files and watch progress will not be affected.")
         }
         .onAppear {
             let source = MetadataSource(rawValue: selectedMetadataSourceRaw) ?? .tmdb

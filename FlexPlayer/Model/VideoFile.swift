@@ -6,17 +6,18 @@
 import Foundation
 
 struct VideoFile: Identifiable, Hashable {
-    let id = UUID()
     let name: String
     let url: URL
     var episodeInfo: (season: Int, episode: Int)?
     var metadata: EpisodeMetadata?
 
+    var id: String { url.path }
+
     func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
+        hasher.combine(url)
     }
 
     static func == (lhs: VideoFile, rhs: VideoFile) -> Bool {
-        lhs.id == rhs.id
+        lhs.url == rhs.url
     }
 }
