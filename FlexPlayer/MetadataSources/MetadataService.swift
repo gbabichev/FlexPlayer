@@ -12,6 +12,10 @@ enum MetadataSource: String, CaseIterable, Codable {
     var displayName: String {
         return rawValue
     }
+
+    static var scanOrder: [MetadataSource] {
+        [.tmdb, .tvdb]
+    }
 }
 
 // Unified metadata structures
@@ -45,26 +49,11 @@ struct UnifiedMovie {
 class MetadataService {
     static let shared = MetadataService()
     
-    private let userDefaultsKey = "selectedMetadataSource"
-    
-    var selectedSource: MetadataSource {
-        get {
-            if let rawValue = UserDefaults.standard.string(forKey: userDefaultsKey),
-               let source = MetadataSource(rawValue: rawValue) {
-                return source
-            }
-            return .tmdb // Default to TMDB
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: userDefaultsKey)
-        }
-    }
-    
     private init() {}
     
-    // Search for a show
-    func searchShow(name: String) async throws -> UnifiedShow? {
-        switch selectedSource {
+    // Search for a show using a specific source
+    func searchShow(name: String, source: MetadataSource) async throws -> UnifiedShow? {
+        switch source {
         case .tmdb:
             guard let show = try await TMDBService.shared.searchShow(name: name) else {
                 return nil
@@ -93,9 +82,24 @@ class MetadataService {
         }
     }
 
-    // Search for shows (returns multiple results)
-    func searchShows(name: String, limit: Int = 10) async throws -> [UnifiedShow] {
-        switch selectedSource {
+    // Search for a show across all enabled sources
+    func searchShow(name: String) async throws -> UnifiedShow? {
+        try await searchShowWithSource(name: name)?.show
+    }
+
+    // Search for a show across all enabled sources and return matched source
+    func searchShowWithSource(name: String) async throws -> (show: UnifiedShow, source: MetadataSource)? {
+        for source in MetadataSource.scanOrder {
+            if let show = try await searchShow(name: name, source: source) {
+                return (show, source)
+            }
+        }
+        return nil
+    }
+
+    // Search for shows from a specific source (returns multiple results)
+    func searchShows(name: String, limit: Int = 10, source: MetadataSource) async throws -> [UnifiedShow] {
+        switch source {
         case .tmdb:
             let shows = try await TMDBService.shared.searchShows(name: name, limit: limit)
             return shows.map { show in
@@ -122,10 +126,31 @@ class MetadataService {
             }
         }
     }
+
+    // Search for shows (returns merged results from all sources)
+    func searchShows(name: String, limit: Int = 10) async throws -> [UnifiedShow] {
+        var merged: [UnifiedShow] = []
+        var seen: Set<String> = []
+
+        for source in MetadataSource.scanOrder {
+            let results = try await searchShows(name: name, limit: limit, source: source)
+            for result in results {
+                let key = "\(result.name.lowercased())|\(result.firstAirDate ?? "")"
+                if seen.insert(key).inserted {
+                    merged.append(result)
+                    if merged.count >= limit {
+                        return merged
+                    }
+                }
+            }
+        }
+
+        return merged
+    }
     
-    // Search for a movie (returns first result)
-    func searchMovie(title: String) async throws -> UnifiedMovie? {
-        switch selectedSource {
+    // Search for a movie using a specific source (returns first result)
+    func searchMovie(title: String, source: MetadataSource) async throws -> UnifiedMovie? {
+        switch source {
         case .tmdb:
             guard let movie = try await TMDBService.shared.searchMovie(title: title) else {
                 return nil
@@ -141,20 +166,24 @@ class MetadataService {
             )
 
         case .tvdb:
-            // TVDB doesn't have great movie support, fallback to TMDB
-            guard let movie = try await TMDBService.shared.searchMovie(title: title) else {
-                return nil
-            }
-            return UnifiedMovie(
-                id: movie.id,
-                title: movie.title,
-                overview: movie.overview,
-                posterPath: movie.posterPath,
-                backdropPath: movie.backdropPath,
-                releaseDate: movie.releaseDate,
-                runtime: movie.runtime
-            )
+            // TVDB movie search is not currently supported in this app
+            return nil
         }
+    }
+
+    // Search for a movie across all enabled sources
+    func searchMovie(title: String) async throws -> UnifiedMovie? {
+        try await searchMovieWithSource(title: title)?.movie
+    }
+
+    // Search for a movie across all enabled sources and return matched source
+    func searchMovieWithSource(title: String) async throws -> (movie: UnifiedMovie, source: MetadataSource)? {
+        for source in MetadataSource.scanOrder {
+            if let movie = try await searchMovie(title: title, source: source) {
+                return (movie, source)
+            }
+        }
+        return nil
     }
 
     // Search for movies (returns multiple results)
@@ -174,9 +203,9 @@ class MetadataService {
         }
     }
     
-    // Get episode details
-    func getEpisode(showId: Int, season: Int, episode: Int) async throws -> UnifiedEpisode? {
-        switch selectedSource {
+    // Get episode details from a specific source
+    func getEpisode(showId: Int, season: Int, episode: Int, source: MetadataSource) async throws -> UnifiedEpisode? {
+        switch source {
         case .tmdb:
             guard let ep = try await TMDBService.shared.getEpisode(showId: showId, season: season, episode: episode) else {
                 return nil
@@ -202,24 +231,39 @@ class MetadataService {
             )
         }
     }
+
+    // Backwards-compatible overload defaults to TMDB
+    func getEpisode(showId: Int, season: Int, episode: Int) async throws -> UnifiedEpisode? {
+        try await getEpisode(showId: showId, season: season, episode: episode, source: .tmdb)
+    }
     
-    // Download poster
-    func downloadPoster(path: String) async throws -> Data {
-        switch selectedSource {
+    // Download poster from a specific source
+    func downloadPoster(path: String, source: MetadataSource) async throws -> Data {
+        switch source {
         case .tmdb:
             return try await TMDBService.shared.downloadPoster(path: path)
         case .tvdb:
             return try await TheTVDBService.shared.downloadImage(path: path)
         }
     }
+
+    // Backwards-compatible overload defaults to TMDB
+    func downloadPoster(path: String) async throws -> Data {
+        try await downloadPoster(path: path, source: .tmdb)
+    }
     
-    // Download episode still/thumbnail
-    func downloadStill(path: String) async throws -> Data {
-        switch selectedSource {
+    // Download episode still/thumbnail from a specific source
+    func downloadStill(path: String, source: MetadataSource) async throws -> Data {
+        switch source {
         case .tmdb:
             return try await TMDBService.shared.downloadStill(path: path)
         case .tvdb:
             return try await TheTVDBService.shared.downloadImage(path: path)
         }
+    }
+
+    // Backwards-compatible overload defaults to TMDB
+    func downloadStill(path: String) async throws -> Data {
+        try await downloadStill(path: path, source: .tmdb)
     }
 }

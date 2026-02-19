@@ -351,10 +351,9 @@ struct ContentView: View {
                 .randomElement()?
                 .name
         }
-        .onChange(of: documentManager.selectedSource) { _, newValue in
-            MetadataService.shared.selectedSource = newValue
-        }
-        .sheet(isPresented: $showSettings) {
+        .sheet(isPresented: $showSettings, onDismiss: {
+            documentManager.loadDocuments(modelContext: modelContext)
+        }) {
             NavigationStack {
                 SettingsView(
                     documentManager: documentManager,

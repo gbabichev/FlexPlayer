@@ -11,13 +11,15 @@ class DocumentManager: ObservableObject {
     @Published var shows: [Show] = []
     @Published var movies: [Movie] = []
     @Published var isLoadingMetadata = false
-    @Published var selectedSource: MetadataSource = MetadataService.shared.selectedSource
 
-    func loadDocuments(modelContext: ModelContext) {
+    func loadDocuments(modelContext: ModelContext, completion: (() -> Void)? = nil) {
         print("\n📚 ========== LOADING DOCUMENTS ==========")
 
         guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
             print("⚠️ Could not access documents directory")
+            DispatchQueue.main.async {
+                completion?()
+            }
             return
         }
 
@@ -208,10 +210,14 @@ class DocumentManager: ObservableObject {
                 self.shows = loadedShows.sorted { $0.name < $1.name }
                 self.movies = loadedMovies.sorted { ($0.metadata?.displayName ?? $0.name) < ($1.metadata?.displayName ?? $1.name) }
                 print("\n✅ ========== LOADED \(self.shows.count) SHOW(S) AND \(self.movies.count) MOVIE(S) ==========\n")
+                completion?()
             }
 
         } catch {
             print("⚠️ Error loading documents: \(error)")
+            DispatchQueue.main.async {
+                completion?()
+            }
         }
     }
 
@@ -309,7 +315,7 @@ class DocumentManager: ObservableObject {
 
     func fetchMetadata(for shows: [Show], movies: [Movie], externalVideos: [ExternalVideo] = [], modelContext: ModelContext) async {
         print("\n🌐 ========== FETCHING METADATA ==========")
-        print("📡 Using source: \(selectedSource.displayName)")
+        print("📡 Scanning sources: \(MetadataSource.scanOrder.map(\.displayName).joined(separator: ", "))")
 
         DispatchQueue.main.async {
             self.isLoadingMetadata = true
@@ -350,17 +356,33 @@ class DocumentManager: ObservableObject {
             }
 
             do {
+                print("   🔍 Searching for show across sources...")
+                let searchResult = try await MetadataService.shared.searchShowWithSource(name: show.name)
+
                 let unifiedShow: UnifiedShow
+                let showSource: MetadataSource
+
+                if let searchResult {
+                    unifiedShow = searchResult.show
+                    showSource = searchResult.source
+                    print("   ✅ Found match: \(unifiedShow.name) (ID: \(unifiedShow.id), Source: \(showSource.displayName))")
+                } else if let metadata = show.metadata {
+                    unifiedShow = UnifiedShow(
+                        id: metadata.tmdbId,
+                        name: metadata.displayName,
+                        overview: metadata.overview,
+                        posterPath: metadata.posterPath,
+                        backdropPath: metadata.backdropPath,
+                        firstAirDate: metadata.firstAirDate
+                    )
+                    showSource = .tmdb
+                    print("   ⚠️ No source match found. Falling back to cached show metadata.")
+                } else {
+                    print("   ⚠️ No results for \(show.name)")
+                    continue
+                }
 
                 if needsShowMetadata {
-                    print("   🔍 Searching for show...")
-                    guard let searchResult = try await MetadataService.shared.searchShow(name: show.name) else {
-                        print("   ⚠️ No results for \(show.name)")
-                        continue
-                    }
-                    unifiedShow = searchResult
-                    print("   ✅ Found match: \(unifiedShow.name) (ID: \(unifiedShow.id))")
-
                     let showMetadata: ShowMetadata
                     if let existing = show.metadata {
                         print("   🔄 Updating existing ShowMetadata")
@@ -388,7 +410,7 @@ class DocumentManager: ObservableObject {
                     if let posterPath = unifiedShow.posterPath, showMetadata.posterData == nil {
                         do {
                             print("   📥 Downloading poster...")
-                            let posterData = try await MetadataService.shared.downloadPoster(path: posterPath)
+                            let posterData = try await MetadataService.shared.downloadPoster(path: posterPath, source: showSource)
                             showMetadata.posterData = posterData
                             print("   ✅ Downloaded poster (\(posterData.count) bytes)")
                         } catch {
@@ -396,15 +418,6 @@ class DocumentManager: ObservableObject {
                         }
                     }
                 } else {
-                    guard let metadata = show.metadata else { continue }
-                    unifiedShow = UnifiedShow(
-                        id: metadata.tmdbId,
-                        name: metadata.displayName,
-                        overview: metadata.overview,
-                        posterPath: metadata.posterPath,
-                        backdropPath: metadata.backdropPath,
-                        firstAirDate: metadata.firstAirDate
-                    )
                     print("   ✅ Using cached show metadata, checking episodes...")
                 }
 
@@ -427,7 +440,7 @@ class DocumentManager: ObservableObject {
                             if let stillPath = existing.stillPath {
                                 do {
                                     print("      📥 Downloading missing thumbnail...")
-                                    let stillData = try await MetadataService.shared.downloadStill(path: stillPath)
+                                    let stillData = try await MetadataService.shared.downloadStill(path: stillPath, source: showSource)
                                     existing.stillData = stillData
                                     print("      ✅ Downloaded missing thumbnail (\(stillData.count) bytes)")
                                     continue
@@ -441,7 +454,8 @@ class DocumentManager: ObservableObject {
                         guard let unifiedEpisode = try await MetadataService.shared.getEpisode(
                             showId: unifiedShow.id,
                             season: season,
-                            episode: episode
+                            episode: episode,
+                            source: showSource
                         ) else {
                             print("      ⚠️ No data for S\(season)E\(episode)")
                             continue
@@ -475,7 +489,7 @@ class DocumentManager: ObservableObject {
                         if let stillPath = unifiedEpisode.stillPath, episodeMetadata.stillData == nil {
                             do {
                                 print("      📥 Downloading thumbnail...")
-                                let stillData = try await MetadataService.shared.downloadStill(path: stillPath)
+                                let stillData = try await MetadataService.shared.downloadStill(path: stillPath, source: showSource)
                                 episodeMetadata.stillData = stillData
                                 print("      ✅ Downloaded thumbnail (\(stillData.count) bytes)")
                             } catch {
@@ -536,14 +550,16 @@ class DocumentManager: ObservableObject {
             do {
                 // Clean up filename for search (remove extension, year, etc.)
                 let searchTitle = cleanMovieTitle(movie.name)
-                print("   🔍 Searching for movie: \(searchTitle)")
+                print("   🔍 Searching for movie across sources: \(searchTitle)")
 
-                guard let unifiedMovie = try await MetadataService.shared.searchMovie(title: searchTitle) else {
+                guard let movieResult = try await MetadataService.shared.searchMovieWithSource(title: searchTitle) else {
                     print("   ⚠️ No results for \(searchTitle)")
                     continue
                 }
+                let unifiedMovie = movieResult.movie
+                let movieSource = movieResult.source
 
-                print("   ✅ Found match: \(unifiedMovie.title) (ID: \(unifiedMovie.id))")
+                print("   ✅ Found match: \(unifiedMovie.title) (ID: \(unifiedMovie.id), Source: \(movieSource.displayName))")
 
                 let movieMetadata: MovieMetadata
                 var posterPathChanged = false
@@ -580,7 +596,7 @@ class DocumentManager: ObservableObject {
                    (movieMetadata.posterData == nil || posterPathChanged) {
                     do {
                         print("   📥 Downloading poster\(posterPathChanged ? " (poster path changed)" : "")...")
-                        let posterData = try await MetadataService.shared.downloadPoster(path: posterPath)
+                        let posterData = try await MetadataService.shared.downloadPoster(path: posterPath, source: movieSource)
                         movieMetadata.posterData = posterData
                         print("   ✅ Downloaded poster (\(posterData.count) bytes)")
                     } catch {
@@ -598,10 +614,8 @@ class DocumentManager: ObservableObject {
         }
 
         print("\n✅ ========== METADATA FETCH COMPLETE ==========\n")
-
-        DispatchQueue.main.async {
+        self.loadDocuments(modelContext: modelContext) {
             self.isLoadingMetadata = false
-            self.loadDocuments(modelContext: modelContext)
         }
     }
 
@@ -655,13 +669,15 @@ class DocumentManager: ObservableObject {
     private func fetchShowMetadataForExternal(video: ExternalVideo, showTitle: String, season: Int, episode: Int, modelContext: ModelContext) async {
         do {
             // Search for the show
-            print("   🔍 Searching for show: \(showTitle)")
-            guard let unifiedShow = try await MetadataService.shared.searchShow(name: showTitle) else {
+            print("   🔍 Searching for show across sources: \(showTitle)")
+            guard let showResult = try await MetadataService.shared.searchShowWithSource(name: showTitle) else {
                 print("   ⚠️ No results for \(showTitle)")
                 return
             }
+            let unifiedShow = showResult.show
+            let showSource = showResult.source
 
-            print("   ✅ Found match: \(unifiedShow.name) (ID: \(unifiedShow.id))")
+            print("   ✅ Found match: \(unifiedShow.name) (ID: \(unifiedShow.id), Source: \(showSource.displayName))")
 
             // Link video to show
             video.showName = showTitle
@@ -696,7 +712,7 @@ class DocumentManager: ObservableObject {
                 if let posterPath = unifiedShow.posterPath {
                     do {
                         print("   📥 Downloading poster...")
-                        let posterData = try await MetadataService.shared.downloadPoster(path: posterPath)
+                        let posterData = try await MetadataService.shared.downloadPoster(path: posterPath, source: showSource)
                         showMetadata.posterData = posterData
                         print("   ✅ Downloaded poster (\(posterData.count) bytes)")
                     } catch {
@@ -710,7 +726,8 @@ class DocumentManager: ObservableObject {
             guard let unifiedEpisode = try await MetadataService.shared.getEpisode(
                 showId: unifiedShow.id,
                 season: season,
-                episode: episode
+                episode: episode,
+                source: showSource
             ) else {
                 print("   ⚠️ No data for S\(season)E\(episode)")
                 try? modelContext.save()
@@ -755,7 +772,7 @@ class DocumentManager: ObservableObject {
             if let stillPath = unifiedEpisode.stillPath, episodeMetadata.stillData == nil {
                 do {
                     print("   📥 Downloading episode thumbnail...")
-                    let stillData = try await MetadataService.shared.downloadStill(path: stillPath)
+                    let stillData = try await MetadataService.shared.downloadStill(path: stillPath, source: showSource)
                     episodeMetadata.stillData = stillData
                     print("   ✅ Downloaded thumbnail (\(stillData.count) bytes)")
                 } catch {
@@ -774,14 +791,16 @@ class DocumentManager: ObservableObject {
     private func fetchMovieMetadataForExternal(video: ExternalVideo, modelContext: ModelContext) async {
         do {
             let searchTitle = cleanMovieTitle(video.fileName)
-            print("   🔍 Searching for movie: \(searchTitle)")
+            print("   🔍 Searching for movie across sources: \(searchTitle)")
 
-            guard let unifiedMovie = try await MetadataService.shared.searchMovie(title: searchTitle) else {
+            guard let movieResult = try await MetadataService.shared.searchMovieWithSource(title: searchTitle) else {
                 print("   ⚠️ No results for \(searchTitle)")
                 return
             }
+            let unifiedMovie = movieResult.movie
+            let movieSource = movieResult.source
 
-            print("   ✅ Found match: \(unifiedMovie.title) (ID: \(unifiedMovie.id))")
+            print("   ✅ Found match: \(unifiedMovie.title) (ID: \(unifiedMovie.id), Source: \(movieSource.displayName))")
 
             // Link video to movie
             video.movieTmdbId = unifiedMovie.id
@@ -816,7 +835,7 @@ class DocumentManager: ObservableObject {
                 if let posterPath = unifiedMovie.posterPath {
                     do {
                         print("   📥 Downloading poster...")
-                        let posterData = try await MetadataService.shared.downloadPoster(path: posterPath)
+                        let posterData = try await MetadataService.shared.downloadPoster(path: posterPath, source: movieSource)
                         movieMetadata.posterData = posterData
                         print("   ✅ Downloaded poster (\(posterData.count) bytes)")
                     } catch {

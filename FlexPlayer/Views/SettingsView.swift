@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -15,23 +16,47 @@ struct SettingsView: View {
     @AppStorage("nextEpisodeCountdownSeconds") private var countdownSeconds = 10
     @AppStorage("gesturesEnabled") private var gesturesEnabled = true
     @AppStorage("swipeControlsAreSwapped") private var swipeControlsAreSwapped = false
-    @AppStorage("selectedMetadataSource") private var selectedMetadataSourceRaw = MetadataSource.tmdb.rawValue
-
-    private var selectedSourceBinding: Binding<MetadataSource> {
-        Binding(
-            get: { MetadataSource(rawValue: selectedMetadataSourceRaw) ?? .tmdb },
-            set: { newValue in
-                selectedMetadataSourceRaw = newValue.rawValue
-                documentManager.selectedSource = newValue
-                MetadataService.shared.selectedSource = newValue
-            }
-        )
-    }
+    @Query private var allShowMetadata: [ShowMetadata]
+    @Query private var allMovieMetadata: [MovieMetadata]
 
     private var appVersionText: String {
         let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         return "Version \(shortVersion) (\(buildNumber))"
+    }
+
+    private var showsWithMetadataCount: Int {
+        let metadataNames = Set(allShowMetadata.map(\.showName))
+        return documentManager.shows.filter { metadataNames.contains($0.name) }.count
+    }
+
+    private var moviesWithMetadataCount: Int {
+        let metadataFileNames = Set(allMovieMetadata.map(\.fileName))
+        return documentManager.movies.filter { metadataFileNames.contains($0.name) }.count
+    }
+
+    private var totalShows: Int {
+        documentManager.shows.count
+    }
+
+    private var totalMovies: Int {
+        documentManager.movies.count
+    }
+
+    private var showsWithoutMetadataCount: Int {
+        max(totalShows - showsWithMetadataCount, 0)
+    }
+
+    private var moviesWithoutMetadataCount: Int {
+        max(totalMovies - moviesWithMetadataCount, 0)
+    }
+
+    private var hasAnyTrackableItems: Bool {
+        (totalShows + totalMovies) > 0
+    }
+
+    private var allItemsHaveMetadata: Bool {
+        hasAnyTrackableItems && showsWithoutMetadataCount == 0 && moviesWithoutMetadataCount == 0
     }
 
     var body: some View {
@@ -72,13 +97,9 @@ struct SettingsView: View {
             }
 
             Section("Metadata") {
-                Picker("Metadata Source", selection: selectedSourceBinding) {
-                    ForEach(MetadataSource.allCases, id: \.self) { source in
-                        Text(source.displayName)
-                            .tag(source)
-                    }
-                }
-                .pickerStyle(.segmented)
+                Text("Fetches from TheMovieDB and TheTVDB.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
                 Button {
                     onFetchMetadata()
@@ -94,10 +115,28 @@ struct SettingsView: View {
                 }
                 .disabled(!hasLibraryContent)
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Shows: \(showsWithMetadataCount)/\(totalShows) with metadata")
+                    Text("Movies: \(moviesWithMetadataCount)/\(totalMovies) with metadata")
+
+                    if hasAnyTrackableItems {
+                        if allItemsHaveMetadata {
+                            Text("All items have metadata.")
+                        } else {
+                            let missingTotal = showsWithoutMetadataCount + moviesWithoutMetadataCount
+                            Text("\(missingTotal) item(s) still missing metadata.")
+                        }
+                    } else {
+                        Text("Add content to your library to track metadata coverage.")
+                    }
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+
                 if documentManager.isLoadingMetadata {
                     VStack(alignment: .leading, spacing: 6) {
                         ProgressView()
-                        Text("Fetching metadata from \(documentManager.selectedSource.displayName)...")
+                        Text("Scanning TheMovieDB + TheTVDB...")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -122,11 +161,6 @@ struct SettingsView: View {
                     dismiss()
                 }
             }
-        }
-        .onAppear {
-            let source = MetadataSource(rawValue: selectedMetadataSourceRaw) ?? .tmdb
-            documentManager.selectedSource = source
-            MetadataService.shared.selectedSource = source
         }
     }
 }
